@@ -30,10 +30,6 @@ protected:
     long count1, count2;
     int max_key_len;
     lru_cache *cache;
-    const char *table_name;
-    const int col_count;
-    const int pk_col_count;
-    const char *col_names[];
 
 public:
     byte *header_block;
@@ -46,25 +42,27 @@ public:
     const char *value;
     int16_t value_len;
 
-    const uint16_t block_size;
+    const uint16_t page_size;
     const int cache_size;
     const char *filename;
-    btree_handler(char *filename, int page_size, int cache_size, const char *table_name = NULL, 
-          int col_count = 0, int pk_col_count = 0, const char *col_names[] = NULL) :
-            filename (filename), block_size (page_size), cache_size (cache_size),
-            table_name (table_name), col_count (col_count), pk_col_count (pk_col_count),
-            col_names (col_names) {
+    btree_handler(char *filename, int page_size, int cache_size) :
+            filename (filename), page_size (page_size), cache_size (cache_size)) {
         init_stats();
         if (cache_size > 0) {
-            cache = new lru_cache(block_size, cache_size, filename);
+            cache = new lru_cache(page_size, cache_size, filename);
             root_block = current_block = cache->get_disk_page_in_cache(0);
             if (cache->is_empty()) {
                 static_cast<T*>(this)->initCurrentBlock();
             }
         } else {
-            root_block = current_block = (byte *) malloc(block_size);
+            root_block = current_block = (byte *) malloc(page_size);
             static_cast<T*>(this)->initCurrentBlock();
         }
+    }
+
+    btree_handler() {
+        // this is just to avoid error saying No default constructor exists
+        // the other constructor must be called from descendants of this class
     }
 
     ~btree_handler() {

@@ -38,7 +38,7 @@
 #include "lru_cache.h"
 #include "btree_handler.h"
 
-typedef unsigned char byte;
+typedef unsigned char uint8_t;
 
 enum {SQIB_TYPE_NULL = 0, SQIB_TYPE_INT8, SQIB_TYPE_INT16, SQIB_TYPE_INT24, SQIB_TYPE_INT32, SQIB_TYPE_INT48, SQIB_TYPE_INT64,
         SQIB_TYPE_REAL, SQIB_TYPE_INT0, SQIB_TYPE_INT1, SQIB_TYPE_TEXT = 12, SQIB_TYPE_BLOB = 13};
@@ -58,30 +58,38 @@ enum {SQIB_RES_SEEK_ERR = -6, SQIB_RES_READ_ERR = -7,
 class sqlite_index_blaster : btree_handler<sqlite_index_blaster> {
 
   protected:
-    lru_cache *cache = NULL;
+    uint16_t make_space_for_new_row(int32_t page_size, uint16_t len_of_rec_len_rowid, uint16_t new_rec_len);
+    int sqib_append_row_with_values(uint8_t *buf, int page_size, int col_count,
+          const uint8_t types[], const void *values[], int lengths[]);
+    int write_page0(const char *table_name, int col_count,
+          int pk_col_count, const char *col_names[]);
+    void write_rec_len_rowid_hdr_len(uint8_t *ptr, uint16_t rec_len,
+          uint32_t rowid, uint16_t hdr_len);
+    int append_empty_row();
+    uint16_t acquire_last_pos(byte *ptr);
 
   public:
     /** 
      * Creates or opens given file and initializes the cache for index operations
-     * @param[in] filename    Name of Sqlite database file.
-     * @param[in] page_size   Database page size.
-     * @param[in] cache_size  Cache size in number of pages.
-     * @param[in] pk_col_count Number of primary key columns.
-     * @param[in] pk_col_names Names of primary key columns
-     * @param[in] other_col_count Number of columns other than primary keys.
-     * @param[in] other_col_names Names of other columns.
+     * @param[in] filename        Name of Sqlite database file.
+     * @param[in] pg_sz           Database page size.
+     * @param[in] cache_size      Cache size in number of pages.
+     * @param[in] total_col_count Total number columns including primary keys.
+     * @param[in] pk_col_count    Number of primary key columns.
+     * @param[in] col_names       Names of columns. Default c1, c2, etc.
+     * @param[in] table_name      Names of table. Default t1.
      * @return SQIB_RES_OK if no error
      */
-    sqlite_index_blaster(char *filename, int page_size, int cache_size, const char *table_name = NULL, 
-          int col_count = 0, int pk_col_count = 0, const char *col_names[] = NULL)
-            : btree_handler<sqlite_index_blaster>(filename, page_size, cache_size,
-                table_name, col_count, pk_col_count, col_names);
+    sqlite_index_blaster(char *filename, int pg_sz, int cache_size,
+      int total_col_count, int pk_col_count, const char *col_names[] = NULL,
+      uint8_t types[], const char *table_name = NULL);
 
-    byte *get_row(int pk_value_count, const char *pk_values[], uint8_t types[]);
+    uint8_t *get_row(const char *pk_values[]);
+    uint8_t *put_row(const char *values[]);
+    uint8_t *delete_row(const char *pk_values[]);
 
-    byte *put_row(int col_count, int pk_col_count, const char *values[], int value_count);
-
-    byte *delete_row(const char *pk_values[], int pk_value_count);
+    int set_col_val(int col_idx, int type, const void *val, uint16_t len);
+    const void *get_col_val(int col_idx, uint32_t *out_col_type);
 
     /** 
      * Flushes cache data into disk
@@ -94,4 +102,3 @@ class sqlite_index_blaster : btree_handler<sqlite_index_blaster> {
     ~sqlite_index_blaster();
 
 };
-
