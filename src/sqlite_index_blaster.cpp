@@ -502,7 +502,13 @@ int sqlite_index_blaster::write_page0(const char *table_name, int col_count,
   //   set_col_val(4, SQIB_TYPE_TEXT, table_script, script_len);
   // } else {
     int table_name_len = strlen(table_name);
-    int script_len = (13 + table_name_len + 2 + 5 * col_count);
+    int script_len = (13 + table_name_len + 2 + 14 + 15;
+    for (int i = 0; i < orig_col_count; i++)
+      script_len += strlen(col_names[i]);
+    script_len += orig_col_count; // commas
+    for (int i = 0; i < pk_col_count; i++)
+      script_len += strlen(col_names[i]);
+    script_len += pk_col_count; // commas
     if (script_len > page_size - 100 - wctx->page_resv_bytes - 8 - 10)
       return SQIB_RES_TOO_LONG;
     set_col_val(4, SQIB_TYPE_TEXT, buf + 110, script_len);
@@ -515,12 +521,25 @@ int sqlite_index_blaster::write_page0(const char *table_name, int col_count,
     *script_pos++ = '(';
     for (int i = 0; i < orig_col_count; ) {
       i++;
+      strcpy(script_pos, col_names[i]);
       *script_pos++ = 'c';
       *script_pos++ = '0' + (i < 100 ? 0 : (i / 100));
       *script_pos++ = '0' + (i < 10 ? 0 : ((i < 100 ? i : i - 100) / 10));
       *script_pos++ = '0' + (i % 10);
-      *script_pos++ = (i == orig_col_count ? ')' : ',');
+      *script_pos++ = ',';
     }
+    memcpy(script_pos, " PRIMARY KEY (", 14);
+    script_pos += 14;
+    for (int i = 0; i < pk_col_count; ) {
+      i++;
+      *script_pos++ = 'c';
+      *script_pos++ = '0' + (i < 100 ? 0 : (i / 100));
+      *script_pos++ = '0' + (i < 10 ? 0 : ((i < 100 ? i : i - 100) / 10));
+      *script_pos++ = '0' + (i % 10);
+      *script_pos++ = (i == pk_col_count ? ')' : ',');
+    }
+    memcpy(script_pos, ") WITH NO ROWID", 15);
+    script_pos += 15;
   // }
   int res = write_page(wctx, 0, page_size);
   if (res)
