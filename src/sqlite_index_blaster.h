@@ -66,7 +66,7 @@ class sqlite_index_blaster : btree_handler<sqlite_index_blaster> {
     void write_rec_len_rowid_hdr_len(uint8_t *ptr, uint16_t rec_len,
           uint32_t rowid, uint16_t hdr_len);
     int append_empty_row();
-    uint16_t acquire_last_pos(byte *ptr);
+    uint16_t acquire_last_pos(uint8_t *ptr);
 
   public:
     /** 
