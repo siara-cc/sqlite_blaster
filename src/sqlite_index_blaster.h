@@ -9,6 +9,7 @@
 
 using namespace std;
 
+// TODO: decide whether needed
 #define page_resv_bytes 5
 
 const int8_t col_data_lens[] = {0, 1, 2, 3, 4, 6, 8, 8};
@@ -26,7 +27,7 @@ enum {SQLT_RES_SEEK_ERR = -6, SQLT_RES_READ_ERR = -7,
   SQLT_RES_NEED_1_PK = -14, SQLT_RES_NO_SPACE = -15};
 
 // CRTP see https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern
-class sqlite : public btree_handler<sqlite> {
+class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
 
     private:
         int U,X,M;
@@ -71,12 +72,32 @@ class sqlite : public btree_handler<sqlite> {
             ptr[1] = input & 0xFF;
         }
 
+        // Stores the given int24_t in the given location
+        // in big-endian sequence
+        void write_int24(uint8_t *ptr, uint32_t input) {
+            int i = 3;
+            ptr[1] = ptr[2] = 0;
+            *ptr = (input >> 24) & 0x80;
+            while (i--)
+                *ptr++ |= ((input >> (8 * i)) & 0xFF);
+        }
+
         // Stores the given uint32_t in the given location
         // in big-endian sequence
         void write_uint32(uint8_t *ptr, uint32_t input) {
             int i = 4;
             while (i--)
                 *ptr++ = (input >> (8 * i)) & 0xFF;
+        }
+
+        // Stores the given int64_t in the given location
+        // in big-endian sequence
+        void write_int48(uint8_t *ptr, uint64_t input) {
+            int i = 7;
+            memset(ptr + 1, '\0', 7);
+            *ptr = (input >> 56) & 0x80;
+            while (i--)
+                *ptr++ |= ((input >> (8 * i)) & 0xFF);
         }
 
         // Stores the given uint64_t in the given location
@@ -133,6 +154,27 @@ class sqlite : public btree_handler<sqlite> {
             return (*ptr << 8) + ptr[1];
         }
 
+        // Reads and returns big-endian int24_t
+        // at a given memory location
+        int32_t read_int24(const uint8_t *ptr) {
+            uint32_t ret;
+            ret = ((uint32_t)(*ptr & 0x80)) << 24;
+            ret |= ((uint32_t)(*ptr++ & 0x7F)) << 16;
+            ret |= ((uint32_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
+        // Reads and returns big-endian uint24_t
+        // at a given memory location
+        uint32_t read_uint24(const uint8_t *ptr) {
+            uint32_t ret;
+            ret = ((uint32_t)*ptr++) << 16;
+            ret += ((uint32_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
         // Reads and returns big-endian uint32_t
         // at a given memory location
         uint32_t read_uint32(const uint8_t *ptr) {
@@ -140,6 +182,20 @@ class sqlite : public btree_handler<sqlite> {
             ret = ((uint32_t)*ptr++) << 24;
             ret += ((uint32_t)*ptr++) << 16;
             ret += ((uint32_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
+        // Reads and returns big-endian int48_t
+        // at a given memory location
+        int64_t read_int48(const uint8_t *ptr) {
+            uint64_t ret;
+            ret = ((uint64_t)(*ptr & 0x80)) << 56;
+            ret |= ((uint64_t)(*ptr++ & 0x7F)) << 48;
+            ret |= ((uint64_t)*ptr++) << 32;
+            ret |= ((uint64_t)*ptr++) << 24;
+            ret |= ((uint64_t)*ptr++) << 16;
+            ret |= ((uint64_t)*ptr++) << 8;
             ret += *ptr;
             return ret;
         }
@@ -225,17 +281,23 @@ class sqlite : public btree_handler<sqlite> {
                     || type == SQLT_TYPE_INT0 || type == SQLT_TYPE_INT1)
                 return 0;
             if (type >= SQLT_TYPE_INT8 && type <= SQLT_TYPE_INT64) {
-                switch (len) {
-                case 1:
+                switch (type) {
+                case SQLT_TYPE_INT8:
                     write_uint8(data_ptr, *((int8_t *) val));
                     break;
-                case 2:
+                case SQLT_TYPE_INT16:
                     write_uint16(data_ptr, *((int16_t *) val));
                     break;
-                case 4:
+                case SQLT_TYPE_INT24:
+                    write_int24(data_ptr, *((int32_t *) val));
+                    break;
+                case SQLT_TYPE_INT32:
                     write_uint32(data_ptr, *((int32_t *) val));
                     break;
-                case 8:
+                case SQLT_TYPE_INT48:
+                    write_int48(data_ptr, *((int64_t *) val));
+                    break;
+                case SQLT_TYPE_INT64:
                     write_uint64(data_ptr, *((int64_t *) val));
                     break;
                 }
@@ -266,12 +328,23 @@ class sqlite : public btree_handler<sqlite> {
             return 0;
         }
 
+        // See .h file for API description
+        uint32_t derive_col_type(uint32_t col_type_or_len) {
+            if (col_type_or_len >= 12) {
+                if (col_type_or_len % 2)
+                    return SQLT_TYPE_TEXT;
+                return SQLT_TYPE_BLOB;
+            } else if (col_type_or_len < 8)
+                return col_type_or_len;
+            return 0;
+        }
+
         // Initializes the buffer as a B-Tree Leaf Index
         void init_bt_idx_interior(uint8_t *ptr) {
             ptr[0] = 2; // Interior index b-tree page
             write_uint16(ptr + 1, 0); // No freeblocks
             write_uint16(ptr + 3, 0); // No records yet
-            write_uint16(ptr + 5, (block_size == 65536 ? 0 : block_size - page_resv_bytes)); // No records yet
+            write_uint16(ptr + 5, (block_size - page_resv_bytes == 65536 ? 0 : block_size - page_resv_bytes)); // No records yet
             write_uint8(ptr + 7, 0); // Fragmented free bytes
             write_uint32(ptr + 8, 0); // right-most pointer
         }
@@ -281,7 +354,7 @@ class sqlite : public btree_handler<sqlite> {
             ptr[0] = 10; // Leaf index b-tree page
             write_uint16(ptr + 1, 0); // No freeblocks
             write_uint16(ptr + 3, 0); // No records yet
-            write_uint16(ptr + 5, (block_size == 65536 ? 0 : block_size - page_resv_bytes)); // No records yet
+            write_uint16(ptr + 5, (block_size - page_resv_bytes == 65536 ? 0 : block_size - page_resv_bytes)); // No records yet
             write_uint8(ptr + 7, 0); // Fragmented free bytes
         }
 
@@ -290,7 +363,7 @@ class sqlite : public btree_handler<sqlite> {
             ptr[0] = 13; // Leaf Table b-tree page
             write_uint16(ptr + 1, 0); // No freeblocks
             write_uint16(ptr + 3, 0); // No records yet
-            write_uint16(ptr + 5, (block_size == 65536 ? 0 : block_size - page_resv_bytes)); // No records yet
+            write_uint16(ptr + 5, (block_size - page_resv_bytes == 65536 ? 0 : block_size - page_resv_bytes)); // No records yet
             write_uint8(ptr + 7, 0); // Fragmented free bytes
         }
 
@@ -298,15 +371,17 @@ class sqlite : public btree_handler<sqlite> {
             return (current_block[0] == 2 || current_block[0] == 5 || current_block[0] == 10 || current_block[0] == 13 ? 0 : 100);
         }
 
-        int write_new_rec(int pos, int64_t rowid, int col_count, const void *values[], const size_t value_lens[], const uint8_t types[]) {            
+        int write_new_rec(int pos, int64_t rowid, int col_count, const void *values[],
+                const size_t value_lens[] = NULL, const uint8_t types[] = NULL, uint8_t *ptr = NULL) {
+
             int data_len = 0;
             for (int i = 0; i < col_count; i++)
-                data_len += value_lens[i];
+                data_len += (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
             int hdr_len = 0;
             for (int i = 0; i < col_count; i++) {
-                int val_len_hdr_len = value_lens[i];
-                if (types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB)
-                    val_len_hdr_len = value_lens[i] * 2 + types[i];
+                int val_len_hdr_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                if (types == NULL || types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB)
+                    val_len_hdr_len = value_lens[i] * 2 + (types == NULL ? 13 : types[i]);
                 hdr_len += get_vlen_of_uint16(val_len_hdr_len);
             }
             int offset = get_offset();
@@ -317,31 +392,45 @@ class sqlite : public btree_handler<sqlite> {
                 rowid_len = get_vlen_of_uint64(rowid);
             int rec_len = hdr_len + data_len;
             int rec_len_vlen = get_vlen_of_uint32(rec_len);
-            int last_pos = read_uint16(current_block + offset + 5);
-            if (last_pos == 0)
-                last_pos = 65536;
-            int ptr_len = read_uint16(current_block + offset + 3) << 1;
-            if (offset + blk_hdr_len + ptr_len + rec_len + rec_len_vlen >= last_pos)
-                return SQLT_RES_NO_SPACE;
-            last_pos -= rec_len;
-            last_pos -= rec_len_vlen;
-            last_pos -= rowid_len;
-            uint8_t *ptr = current_block + last_pos;
-            ptr += write_vint32(ptr, rec_len);
-            if (current_block[offset] == 10 || current_block[offset] == 13)
-                ptr += write_vint64(ptr, rowid);
+
+            int last_pos = 0;
+            bool is_ptr_given = true;
+            if (ptr == NULL) {
+                is_ptr_given = false;
+                last_pos = read_uint16(current_block + offset + 5);
+                if (last_pos == 0)
+                    last_pos = 65536;
+                int ptr_len = read_uint16(current_block + offset + 3) << 1;
+                if (offset + blk_hdr_len + ptr_len + rec_len + rec_len_vlen >= last_pos)
+                    return SQLT_RES_NO_SPACE;
+                last_pos -= rec_len;
+                last_pos -= rec_len_vlen;
+                last_pos -= rowid_len;
+                ptr = current_block + last_pos;
+            }
+
+            if (!is_ptr_given) {
+                ptr += write_vint32(ptr, rec_len);
+                if (current_block[offset] == 10 || current_block[offset] == 13)
+                    ptr += write_vint64(ptr, rowid);
+            }
             ptr += write_vint32(ptr, hdr_len);
             for (int i = 0; i < col_count; i++) {
-                int col_len_in_hdr = (types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB)
-                        ? value_lens[i] * 2 + types[i]
-                        : col_data_lens[types[i]];
+                uint8_t type = (types == NULL ? SQLT_TYPE_TEXT : types[i]);
+                int value_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                int col_len_in_hdr = (type == SQLT_TYPE_TEXT || type == SQLT_TYPE_BLOB)
+                        ? value_len * 2 + type : col_data_lens[type];
                 ptr += write_vint32(ptr, col_len_in_hdr);
             }
             for (int i = 0; i < col_count; i++) {
-                if (value_lens[i] > 0)
-                    ptr += write_data(ptr, types[i], values[i], value_lens[i]);
+                if (value_lens == NULL || value_lens[i] > 0) {
+                    ptr += write_data(ptr, types == NULL ? SQLT_TYPE_TEXT : types[i],
+                        values[i], value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                }
             }
-            if (pos >= 0) { // if pos given, update record count, last data pos and insert record
+
+            // if pos given, update record count, last data pos and insert record
+            if (last_pos > 0 && pos >= 0) {
                 int rec_count = read_uint16(current_block + offset + 3);
                 write_uint16(current_block + offset + 3, rec_count + 1);
                 write_uint16(current_block + offset + 5, last_pos);
@@ -349,7 +438,9 @@ class sqlite : public btree_handler<sqlite> {
                 memmove(ins_ptr + 2, ins_ptr, (rec_count - pos) * 2);
                 write_uint16(ins_ptr, last_pos);
             }
-            return last_pos;
+
+            return is_ptr_given ? rec_len : last_pos;
+
         }
 
         // Writes data into buffer to form first page of Sqlite db
@@ -578,23 +669,23 @@ class sqlite : public btree_handler<sqlite> {
         int found_pos;
         unsigned long child_addr;
         int pk_count;
-        int col_count;
+        int column_count;
         const char **column_names;
         const char *table_name;
         int blk_hdr_len;
-        sqlite(int total_col_count, int pk_col_count, 
+        sqlite_index_blaster(int total_col_count, int pk_col_count, 
                 const char *col_names[] = NULL, const char *tbl_name = NULL,
                 int block_sz = DEFAULT_BLOCK_SIZE, int cache_sz = 0,
-                const char *fname = NULL) : col_count (total_col_count), pk_count (pk_col_count),
+                const char *fname = NULL) : column_count (total_col_count), pk_count (pk_col_count),
                     column_names (col_names), table_name (tbl_name),
-                    btree_handler<sqlite>(block_sz, cache_sz, fname, 1, true) {
+                    btree_handler<sqlite_index_blaster>(block_sz, cache_sz, fname, 1, true) {
             U = block_size - page_resv_bytes;
             X = ((U-12)*64/255)-23;
             M = ((U-12)*32/255)-23;
             master_block = NULL;
             if (cache_size > 0) {
                 if (cache->is_empty()) {
-                    int res = write_page0(col_count, pk_count, column_names, table_name);
+                    int res = write_page0(column_count, pk_count, column_names, table_name);
                     if (res != SQLT_RES_OK)
                         throw res;
                 } else {
@@ -609,15 +700,81 @@ class sqlite : public btree_handler<sqlite> {
         void init_derived() {
         }
 
-        sqlite(uint32_t block_sz, uint8_t *block, bool is_leaf, bool should_init)
-                : btree_handler<sqlite>(block_sz, block, is_leaf, should_init) {
+        sqlite_index_blaster(uint32_t block_sz, uint8_t *block, bool is_leaf, bool should_init)
+                : btree_handler<sqlite_index_blaster>(block_sz, block, is_leaf, should_init) {
             U = block_size - page_resv_bytes;
             X = ((U-12)*64/255)-23;
             M = ((U-12)*32/255)-23;
             master_block = NULL;
         }
 
-        ~sqlite() {
+        ~sqlite_index_blaster() {
+        }
+
+        int make_new_rec(uint8_t *ptr, const void *values[], 
+                const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
+            return write_new_rec(-1, 0, column_count, values, value_lens, types, ptr);
+        }
+
+        uint8_t *locate_col(int which_col, uint8_t *rec, int& col_type_or_len, int& col_len, int& col_type) {
+            int8_t vlen;
+            int hdr_len = read_vint32(rec, &vlen);
+            int hdr_pos = vlen;
+            uint8_t *data_ptr = rec + hdr_len;
+            col_len = vlen = 0;
+            do {
+                data_ptr += col_len;
+                hdr_pos += vlen;
+                if (hdr_pos >= hdr_len)
+                    return NULL;
+                col_type_or_len = read_vint32(rec + hdr_pos, &vlen);
+                col_len = derive_data_len(col_type_or_len);
+                col_type = derive_col_type(col_type_or_len);
+            } while (which_col--);
+            return data_ptr;
+        }
+
+        int read_col(int which_col, uint8_t *rec, int rec_len, void *out) {
+            int col_type_or_len, col_len, col_type;
+            uint8_t *data_ptr = locate_col(which_col, rec, col_type_or_len, col_len, col_type);
+            if (data_ptr == NULL)
+                return SQLT_RES_MALFORMED;
+            switch (col_type) {
+                case SQLT_TYPE_BLOB:
+                case SQLT_TYPE_TEXT:
+                    memcpy(out, data_ptr, col_len);
+                    return col_len;
+                case SQLT_TYPE_NULL:
+                    return col_type_or_len;
+                case SQLT_TYPE_INT0:
+                    *((int8_t *) out) = 0;
+                    return col_len;
+                case SQLT_TYPE_INT1:
+                    *((int8_t *) out) = 1;
+                    return col_len;
+                case SQLT_TYPE_INT8:
+                    *((int8_t *) out) = *data_ptr;
+                    return col_len;
+                case SQLT_TYPE_INT16:
+                    *((int16_t *) out) = read_uint16(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT24:
+                    *((int32_t *) out) = read_int24(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT32:
+                    *((int32_t *) out) = read_uint32(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT48:
+                    *((int64_t *) out) = read_int48(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT64:
+                    *((int64_t *) out) = read_uint64(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_REAL:
+                    *((double *) out) = read_double(data_ptr);
+                    return col_len;
+            }
+            return SQLT_RES_MALFORMED;
         }
 
         void cleanup() {
@@ -708,14 +865,14 @@ class sqlite : public btree_handler<sqlite> {
             return ((block_size-page_resv_bytes-12)*64/255)-23+5;
         }
 
-        inline int search_current_block() {
-            int middle, first, filled_size, cmp;
+        int search_current_block(bptree_iter_ctx *ctx = NULL) {
+            int middle, first, filled_sz, cmp;
             int8_t vlen;
             found_pos = -1;
             first = 0;
-            filled_size = read_uint16(current_block + 3);
-            while (first < filled_size) {
-                middle = (first + filled_size) >> 1;
+            filled_sz = read_uint16(current_block + 3);
+            while (first < filled_sz) {
+                middle = (first + filled_sz) >> 1;
                 key_at = current_block + read_uint16(current_block + blk_hdr_len + middle * 2);
                 if (!is_leaf())
                     key_at += 4;
@@ -731,13 +888,20 @@ class sqlite : public btree_handler<sqlite> {
                 if (cmp < 0)
                     first = middle + 1;
                 else if (cmp > 0)
-                    filled_size = middle;
+                    filled_sz = middle;
                 else {
-                    found_pos = middle;
+                    if (ctx) {
+                        ctx->found_page_idx = ctx->last_page_lvl;
+                        ctx->found_page_pos = middle;
+                    }
                     return middle;
                 }
             }
-            return ~filled_size;
+            if (ctx) {
+                ctx->found_page_idx = ctx->last_page_lvl;
+                ctx->found_page_pos = ~filled_sz;
+            }
+            return ~filled_sz;
         }
 
         inline int get_header_size() {
@@ -757,7 +921,6 @@ class sqlite : public btree_handler<sqlite> {
             total_size--;
         }
 
-        // TODO: Won't work for records in interior pages
         void del_ptr(int pos) {
             int filled_size = read_uint16(current_block + 3);
             uint8_t *kv_idx = current_block + blk_hdr_len + pos * 2;
@@ -772,11 +935,11 @@ class sqlite : public btree_handler<sqlite> {
             uint8_t *rec_ptr = current_block + read_uint16(kv_idx);
             rec_len += read_vint32(rec_ptr + rec_len, &vlen);
             rec_len += vlen;
-            int kv_last_pos = get_kVLast_pos();
+            int kv_last_pos = get_kv_last_pos();
             if (rec_ptr != current_block + kv_last_pos)
                 memmove(current_block + kv_last_pos + rec_len, current_block + kv_last_pos, rec_ptr - current_block + kv_last_pos);
             kv_last_pos += rec_len;
-            set_kVLast_pos(kv_last_pos);*/
+            set_kv_last_pos(kv_last_pos);*/
         }
 
         int get_ptr(int pos) {
@@ -789,7 +952,7 @@ class sqlite : public btree_handler<sqlite> {
 
         void make_space() {
             int lvl = current_block[0] & 0x1F;
-            const int data_size = block_size - get_kVLast_pos();
+            const int data_size = block_size - get_kv_last_pos();
             uint8_t data_buf[data_size];
             int new_data_len = 0;
             int new_idx;
@@ -807,7 +970,7 @@ class sqlite : public btree_handler<sqlite> {
             int new_kv_last_pos = block_size - new_data_len;
             memcpy(current_block + new_kv_last_pos, data_buf + data_size - new_data_len, new_data_len);
             //printf("%d, %d\n", data_size, new_data_len);
-            set_kVLast_pos(new_kv_last_pos);
+            set_kv_last_pos(new_kv_last_pos);
             search_current_block();
         }
 
@@ -836,16 +999,22 @@ class sqlite : public btree_handler<sqlite> {
             return search_result;
         }
 
-        // TODO: update overflow pages, or move them to freelist pages as the case may be
+        // TODO: updates only if length of existing record is same as what is updated
         void update_data() {
-            // int8_t vlen;
-            // if (key_len > 0) {
-            //     uint8_t *raw_key_at = key_at + read_vint32(key_at, &vlen);
-            //     if (memcmp(raw_key_at, key, key_len) != 0)
-            //         cout << "Key not matching for update: " << key << ", len: " << key_len << endl;
-            //     raw_key_at += key_len;
-            //     memcpy(raw_key_at, value, value_len);
-            // }
+            int8_t vlen;
+            if (key_len > 0) {
+                int hdr_len = read_vint32(key_at, &vlen);
+                uint8_t *raw_key_at = key_at + hdr_len;
+                if (memcmp(raw_key_at, key, key_len) != 0)
+                    cout << "Key not matching for update: " << key << ", len: " << key_len << endl;
+                raw_key_at += key_len;
+                if (hdr_len + key_len + value_len == key_at_len && key_at_len <= X)
+                    memcpy(raw_key_at, value, value_len);
+            } else {
+                int rec_len = -key_len;
+                if (rec_len == key_at_len && rec_len <= X)
+                    memcpy(key_at, key, rec_len);
+            }
         }
 
         bool is_full(int search_result) {
@@ -867,9 +1036,9 @@ class sqlite : public btree_handler<sqlite> {
                 on_page_len += 4;
             int ptr_size = filled_size() + 1;
             ptr_size *= 2;
-            if (get_kVLast_pos() <= (blk_hdr_len + ptr_size + on_page_len)) {
+            if (get_kv_last_pos() <= (blk_hdr_len + ptr_size + on_page_len)) {
                 //make_space();
-                //if (get_kVLast_pos() <= (blk_hdr_len + ptr_size + rec_len))
+                //if (get_kv_last_pos() <= (blk_hdr_len + ptr_size + rec_len))
                     return true;
             }
             return false;
@@ -880,7 +1049,7 @@ class sqlite : public btree_handler<sqlite> {
             if (cache_size > 0) {
                 new_page = cache->get_new_page(current_block);
                 set_block_changed(new_page, size, true);
-                if ((cache->file_page_count - 1) == (1073741824UL / block_size)) {
+                if ((cache->file_page_count - 1) * block_size == 1073741824UL) {
                     new_page = cache->get_new_page(current_block);
                     set_block_changed(new_page, size, true);
                 }
@@ -900,11 +1069,11 @@ class sqlite : public btree_handler<sqlite> {
             uint32_t SQLT_NODE_SIZE = block_size;
             int lvl = current_block[0] & 0x1F;
             uint8_t *b = allocate_block(SQLT_NODE_SIZE, is_leaf(), lvl);
-            sqlite new_block(SQLT_NODE_SIZE, b, is_leaf(), true);
+            sqlite_index_blaster new_block(SQLT_NODE_SIZE, b, is_leaf(), true);
             set_changed(true);
             new_block.set_changed(true);
             SQLT_NODE_SIZE -= page_resv_bytes;
-            int kv_last_pos = get_kVLast_pos();
+            int kv_last_pos = get_kv_last_pos();
             int half_kVLen = SQLT_NODE_SIZE - kv_last_pos + 1;
             half_kVLen /= 2;
 
@@ -947,7 +1116,7 @@ class sqlite : public btree_handler<sqlite> {
                 }
             }
 
-            kv_last_pos = get_kVLast_pos();
+            kv_last_pos = get_kv_last_pos();
             if (brk_rec_len) {
                 memmove(new_block.current_block + kv_last_pos + brk_rec_len, new_block.current_block + kv_last_pos,
                             SQLT_NODE_SIZE - kv_last_pos - brk_rec_len);
@@ -962,7 +1131,7 @@ class sqlite : public btree_handler<sqlite> {
                 int old_blk_new_len = brk_kv_pos - kv_last_pos;
                 memcpy(current_block + SQLT_NODE_SIZE - old_blk_new_len,
                     new_block.current_block + kv_last_pos, old_blk_new_len);
-                set_kVLast_pos(SQLT_NODE_SIZE - old_blk_new_len);
+                set_kv_last_pos(SQLT_NODE_SIZE - old_blk_new_len);
                 set_filled_size(brk_idx);
                 if (!is_leaf()) {
                     uint32_t addr_to_write = brk_child_addr;
@@ -975,7 +1144,7 @@ class sqlite : public btree_handler<sqlite> {
                 int new_size = orig_filled_size - brk_idx - 1;
                 uint8_t *block_ptrs = new_block.current_block + blk_hdr_len;
                 memmove(block_ptrs, block_ptrs + (brk_idx << 1), new_size << 1);
-                new_block.set_kVLast_pos(brk_kv_pos);
+                new_block.set_kv_last_pos(brk_kv_pos);
                 new_block.set_filled_size(new_size);
                 if (!is_leaf())
                     write_uint32(new_block.current_block + 8, brk_child_addr);
@@ -1022,7 +1191,7 @@ class sqlite : public btree_handler<sqlite> {
             // See https://www.sqlite.org/fileformat.html
             int K = M+((P-M)%(U-4));
             int on_bt_page = (P <= X ? P : (K <= X ? K : M));
-            int kv_last_pos = get_kVLast_pos();
+            int kv_last_pos = get_kv_last_pos();
             kv_last_pos -= on_bt_page;
             kv_last_pos -= get_vlen_of_uint32(P);
             if (!is_leaf())
@@ -1034,7 +1203,7 @@ class sqlite : public btree_handler<sqlite> {
             copy_kv_with_overflow(ptr, P, on_bt_page, hdr_len);
             ins_ptr(search_result, kv_last_pos);
             int filled_size = read_uint16(current_block + 3);
-            set_kVLast_pos(kv_last_pos);
+            set_kv_last_pos(kv_last_pos);
             set_changed(true);
 
             // if (BPT_MAX_KEY_LEN < key_len)
@@ -1080,7 +1249,7 @@ class sqlite : public btree_handler<sqlite> {
                 }
                 if (key_remaining > 0 || val_remaining > 0) {
                     uint32_t new_page_no = cache->get_page_count() + 1;
-                    if (new_page_no == 262145)
+                    if ((new_page_no - 1) * block_size == 1073741824UL)
                         new_page_no++;
                     write_uint32(copying_on_bt_page ? ptr : ptr0, new_page_no);
                     uint8_t *ovfl_ptr = allocate_block(block_size, BPT_BLK_TYPE_OVFL, 0);
@@ -1114,11 +1283,11 @@ class sqlite : public btree_handler<sqlite> {
             write_uint16(current_block + 3, filled_size);
         }
 
-        int get_kVLast_pos() {
+        int get_kv_last_pos() {
             return read_uint16(current_block + 5);
         }
 
-        void set_kVLast_pos(int val) {
+        void set_kv_last_pos(int val) {
             if (val == 0)
                 val = 65535;
             write_uint16(current_block + 5, val);

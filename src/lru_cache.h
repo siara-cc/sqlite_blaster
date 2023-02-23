@@ -1,7 +1,6 @@
 #ifndef LRUCACHE_H
 #define LRUCACHE_H
 #include <set>
-#include <unordered_map>
 #include <iostream>
 #define _FILE_OFFSET_BITS 64
 #ifndef _LARGEFILE64_SOURCE
