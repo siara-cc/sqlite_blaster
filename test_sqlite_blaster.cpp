@@ -1,6 +1,407 @@
+/*
+  Testing program for Sqlite Index Blaster
+
+  Sqlite Index Blaster is a library that inserts records in Sqlite format 3
+  much faster than the original SQLite library.
+  This utility is intended for testing it.
+
+  https://github.com/siara-in/sqlite_micro_logger
+
+  Copyright @ 2019 Arundale Ramanathan, Siara Logics (cc)
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef ARDUINO
+
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
+
 #include "sqlite_index_blaster.h"
 
-int main() {
-    sqlite ix(2, 1, (const char *[]) {"key", "value"}, "idx1", 4096, 32, "hw.db");
-    ix.put("hello", 5, "world", 5);
+void print_usage() {
+  printf("\nTesting Sqlite Index Blaster\n");
+  printf("---------------------------\n\n");
+  printf("Sqlite Index Blaster is a library that inserts records in Sqlite format 3\n");
+  printf("much faster than the original SQLite library.\n");
+  printf("This utility is intended for testing it.\n\n");
+  printf("Usage\n");
+  printf("-----\n\n");
+  printf("test_sqlite_blaster -c <db_name.db> <page_size> <tbl_name>\n");
+  printf("             <total_col_count> <pk_col_count> <col_1>,<col_2>...<col_n>\n");
+  printf("    Creates a Sqlite database with the given name and page size\n");
+  printf("          and given Column names in CSV format.\n");
+  printf("          Overwrites any existing file\n\n");
+  printf("test_sqlite_blaster -i <db_name.db> <page_size>\n");
+  printf("             <total_col_count> <pk_col_count> <csv_1> ... <csv_n>\n");
+  printf("    Inserts to the Sqlite database created using -c above\n");
+  printf("        with records in CSV format (page_size, total_col_count\n");
+  printf("        and pk_col_count have to match)\n\n");
+  printf("test_sqlite_blaster -r <db_name.db> <page_size> <total_col_count>\n");
+  printf("             <pk_col_count> <pk_val_1>,<pk_val_2>...<pk_val_n>\n");
+  printf("    Searches <db_name.db> for given keys and prints result\n\n");
+  printf("test_sqlite_blaster -t\n");
+  printf("    Runs pre-defined tests\n\n");
+  printf("NOTE: -r and -i do not detect data types and consider columns as text\n");
+  printf("      For using other datatypes, please use the API.\n\n");
 }
+
+bool validate_page_size(int32_t page_size) {
+  if (page_size == 512 || page_size == 1024 || page_size == 2048
+        || page_size == 4096 || page_size == 8192 || page_size == 16384
+        || page_size == 32768 || page_size == 65536)
+      return true;
+  printf("Page size should be one of 512, 1024, 2048, 4096, 8192, 16384, 32768 or 65536\n");
+  return false;
+}
+
+void read_csv(char **out, char *csv, int col_count, bool allow_spaces) {
+  uint8_t *p = (uint8_t *) csv;
+  char name[100];
+  int col_idx = 0;
+  int col_len = 0;
+  while (*p != '\0') {
+    if (*p == ' ' && !allow_spaces) {
+      p++;
+      continue;
+    }
+    if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_'
+          || *p == ' ' || (col_len > 0 && *p >= '0' && *p <= '9') || *p > 127) {
+      name[col_len++] = *p;
+    }
+    if (*p == ',') {
+      out[col_idx] = (char *) malloc(col_len + 1);
+      char *col_name = out[col_idx];
+      memcpy(col_name, name, col_len);
+      out[col_len] = 0;
+      col_idx++;
+      col_len = 0;
+    }
+    p++;
+  }
+  out[col_idx] = (char *) malloc(col_len + 1);
+  char *col_name = out[col_idx];
+  memcpy(col_name, name, col_len);
+  col_name[col_len] = 0;
+}
+
+void release_parsed_csv(char *parsed_csv[], int col_count) {
+  for (int i = 0; i < col_count; i++) {
+    free(parsed_csv[i]);
+  }
+}
+
+int create_db(int argc, char *argv[]) {
+  int page_size = atoi(argv[3]);
+  if (!validate_page_size(page_size))
+    return SQLT_RES_ERR;
+  int col_count = atoi(argv[5]);
+  int pk_col_count = atoi(argv[6]);
+  unlink(argv[2]);
+  char *col_names[col_count];
+  const char **const_col_names = (const char **) col_names;
+  read_csv(col_names, argv[7], col_count, false);
+  sqlite_index_blaster sqib(col_count, pk_col_count, const_col_names, argv[4], page_size, 40, argv[2]);
+  release_parsed_csv(col_names, col_count);
+  return SQLT_RES_OK;
+}
+
+bool file_exists(const char *filename) {
+  struct stat buffer;
+  return (stat(filename, &buffer) == 0);
+}
+
+int insert_db(int argc, char *argv[]) {
+  if (!file_exists(argv[2]))
+    cout << "File does not exist" << endl;
+  int page_size = atoi(argv[3]);
+  if (!validate_page_size(page_size))
+    return SQLT_RES_ERR;
+  int col_count = atoi(argv[4]);
+  int pk_col_count = atoi(argv[5]);
+  sqlite_index_blaster sqib(col_count, pk_col_count, (const char *[]) {""}, "", page_size, 320, argv[2]);
+  for (int i = 0; i < argc-6; i++) {
+    char *parsed_csv[col_count];
+    read_csv(parsed_csv, argv[6 + i], col_count, true);
+    uint8_t rec[strlen(argv[6+i]+20)];
+    int rec_len = sqib.make_new_rec(rec, col_count, (const void **) parsed_csv);
+    sqib.put(rec, -rec_len, NULL, 0);
+    release_parsed_csv(parsed_csv, col_count);
+  }
+  return SQLT_RES_OK;
+}
+
+int read_db(int argc, char *argv[]) {
+  if (!file_exists(argv[2]))
+    cout << "File does not exist" << endl;
+  int page_size = atoi(argv[3]);
+  if (!validate_page_size(page_size))
+    return SQLT_RES_ERR;
+  int col_count = atoi(argv[4]);
+  int pk_col_count = atoi(argv[5]);
+  sqlite_index_blaster sqib(col_count, pk_col_count, (const char *[]) {""}, "", page_size, 320, argv[2]);
+  int rec_len = 10000;
+  uint8_t *rec = (uint8_t *) malloc(rec_len);
+  int val_len = 2000;
+  uint8_t *val = (uint8_t *) malloc(val_len);
+  char *parsed_csv[pk_col_count];
+  read_csv(parsed_csv, argv[6], pk_col_count, true);
+  uint8_t pk_rec[strlen(argv[6])+20];
+  int pk_rec_len = sqib.make_new_rec(pk_rec, pk_col_count, (const void **) parsed_csv);
+  if (sqib.get(pk_rec, -pk_rec_len, &rec_len, rec)) {
+    for (int i = 0; i < col_count; i++) {
+      val_len = sqib.read_col(i, rec, rec_len, val);
+      printf("%.*s", val_len, val);
+      if (i < col_count - 1)
+        printf(",");
+    }
+    printf("\n");
+  } else
+    printf("Not found\n");
+  free(val);
+  free(rec);
+  release_parsed_csv(parsed_csv, pk_col_count);
+  return SQLT_RES_OK;
+}
+
+// Returns how many bytes the given integer will
+// occupy if stored as a variable integer
+int8_t get_vlen_of_uint32(uint32_t vint) {
+    return vint > ((1 << 28) - 1) ? 5
+        : (vint > ((1 << 21) - 1) ? 4 
+        : (vint > ((1 << 14) - 1) ? 3
+        : (vint > ((1 << 7) - 1) ? 2 : 1)));
+}
+
+int write_vint32(uint8_t *ptr, uint32_t vint) {
+    int len = get_vlen_of_uint32(vint);
+    for (int i = len - 1; i > 0; i--)
+        *ptr++ = 0x80 + ((vint >> (7 * i)) & 0x7F);
+    *ptr = vint & 0x7F;
+    return len;
+}
+
+uint32_t read_vint32(const uint8_t *ptr, int8_t *vlen) {
+    uint32_t ret = 0;
+    int8_t len = 5; // read max 5 bytes
+    do {
+        ret <<= 7;
+        ret += *ptr & 0x7F;
+        len--;
+    } while ((*ptr++ & 0x80) == 0x80 && len);
+    if (vlen)
+        *vlen = 5 - len;
+    return ret;
+}
+
+#define CS_PRINTABLE 1
+#define CS_ALPHA_ONLY 2
+#define CS_NUMBER_ONLY 3
+#define CS_ONE_PER_OCTET 4
+#define CS_255_RANDOM 5
+#define CS_255_DENSE 6
+#define MIN_KEY_LEN 12
+int64_t insert(uint8_t **data_buf_ptr, int64_t data_sz, int KEY_LEN, int VALUE_LEN, int NUM_ENTRIES, int CHAR_SET, bool KEY_VALUE_VAR_LEN) {
+    char k[KEY_LEN + 1];
+    char v[VALUE_LEN + 1];
+    int k_len = KEY_LEN;
+    int v_len = VALUE_LEN;
+    uint8_t *data_buf = *data_buf_ptr;
+    int64_t ret = 0;
+    srand(time(NULL));
+    for (unsigned long l = 0; l < NUM_ENTRIES; l++) {
+
+        if (CHAR_SET == CS_PRINTABLE) {
+            for (int i = 0; i < KEY_LEN; i++)
+                k[i] = 32 + (rand() % 95);
+            k[KEY_LEN] = 0;
+        } else if (CHAR_SET == CS_ALPHA_ONLY) {
+            for (int i = 0; i < KEY_LEN; i++)
+                k[i] = 97 + (rand() % 26);
+            k[KEY_LEN] = 0;
+        } else if (CHAR_SET == CS_NUMBER_ONLY) {
+            for (int i = 0; i < KEY_LEN; i++)
+                k[i] = 48 + (rand() % 10);
+            k[KEY_LEN] = 0;
+        } else if (CHAR_SET == CS_ONE_PER_OCTET) {
+            for (int i = 0; i < KEY_LEN; i++)
+                k[i] = ((rand() % 32) << 3) | 0x07;
+            k[KEY_LEN] = 0;
+        } else if (CHAR_SET == CS_255_RANDOM) {
+            for (int i = 0; i < KEY_LEN; i++)
+                k[i] = (rand() % 255);
+            k[KEY_LEN] = 0;
+            for (int i = 0; i < KEY_LEN; i++) {
+                if (k[i] == 0)
+                    k[i] = i + 1;
+            }
+        } else if (CHAR_SET == CS_255_DENSE) {
+            KEY_LEN = 4;
+            k[0] = (l >> 24) & 0xFF;
+            k[1] = (l >> 16) & 0xFF;
+            k[2] = (l >> 8) & 0xFF;
+            k[3] = (l & 0xFF);
+            if (k[0] == 0)
+                k[0]++;
+            if (k[1] == 0)
+                k[1]++;
+            if (k[2] == 0)
+                k[2]++;
+            if (k[3] == 0)
+                k[3]++;
+            k[4] = 0;
+        }
+        //cout << "Value: ";
+        for (int i = 0; i < VALUE_LEN; i++) {
+            v[VALUE_LEN - i - 1] = k[i % KEY_LEN];
+            //cout << (char) k[i];
+        }
+        //cout << endl;
+        v[VALUE_LEN] = 0;
+        //itoa(rand(), v, 10);
+        //itoa(rand(), v + strlen(v), 10);
+        //itoa(rand(), v + strlen(v), 10);
+        if (KEY_VALUE_VAR_LEN) {
+            k_len = (rand() % KEY_LEN) + 1;
+            v_len = (rand() % VALUE_LEN) + 1;
+            if (k_len < MIN_KEY_LEN)
+                k_len = MIN_KEY_LEN;
+            k[k_len] = 0;
+            v[v_len] = 0;
+        }
+        // if (l == 0)
+        //     printf("key: %.*s, value: %.*s\n", KEY_LEN, k, VALUE_LEN, v);
+        ret += write_vint32(data_buf + ret, k_len);
+        memcpy(data_buf + ret, k, k_len);
+        ret += k_len;
+        data_buf[ret++] = 0;
+        ret += write_vint32(data_buf + ret, v_len);
+        memcpy(data_buf + ret, v, v_len);
+        ret += v_len;
+        data_buf[ret++] = 0;
+        if (ret + KEY_LEN + VALUE_LEN + 1000 < data_sz) {
+          data_sz += (32 * 1024 * 1024);
+          //printf("New data size: %d\n", data_sz / 1024 / 1024);
+          data_buf = (uint8_t *) realloc(data_buf, data_sz);
+          *data_buf_ptr = data_buf;
+        }
+
+    }
+    return ret;
+}
+
+void check_value(const char *key, int key_len, const char *val, int val_len,
+      const char *returned_value, int returned_len, int& cmp) {
+      int d = util::compare((const uint8_t *) val, val_len, (const uint8_t *) returned_value, returned_len);
+      if (d != 0) {
+        cmp++;
+          //printf("cmp: %.*s==========%.*s--------->%.*s\n", key_len, key, val_len, val, returned_len, returned_value);
+          //cout << cmp << ":" << (char *) key << "=========="
+          //        << val << "----------->" << returned_value << endl;
+      }
+}
+
+bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
+  unlink(filename);
+  int U = page_size - 5;
+  int M = ((U-12)*32/255)-23-10;
+  int KEY_LEN = M;
+  int VALUE_LEN = page_size * 2 + M;
+  int NUM_ENTRIES = start_count * 512 / page_size;
+  int64_t data_alloc_sz = 64 * 1024 * 1024;
+  uint8_t *data_buf = (uint8_t *) malloc(data_alloc_sz);
+  int64_t data_sz = insert(&data_buf, data_alloc_sz, KEY_LEN, VALUE_LEN, NUM_ENTRIES, 1, true);
+  cout << "Testing page size: " << page_size << ", count: " << NUM_ENTRIES
+       << ", Data size: " << data_sz / 1000 << "kb" << ", Cache size: " << cache_size << "kb" << endl;
+  sqlite_index_blaster sqib(2, 1, (const char *[]) {"key", "value"}, "imain", page_size, cache_size, filename);
+  for (int64_t pos = 0; pos < data_sz; pos++) {
+      int8_t vlen;
+      uint32_t key_len = read_vint32(data_buf + pos, &vlen);
+      pos += vlen;
+      uint32_t value_len = read_vint32(data_buf + pos + key_len + 1, &vlen);
+      sqib.put((char *) data_buf + pos, key_len, (char *) data_buf + pos + key_len + vlen + 1, value_len);
+      pos += key_len + value_len + vlen + 1;
+  }
+  int cmp = 0;
+  int ctr = 0;
+  int null_ctr = 0;
+  char value_buf[VALUE_LEN + 1];
+  for (int64_t pos = 0; pos < data_sz; pos++) {
+      int len = VALUE_LEN;
+      int8_t vlen;
+      uint32_t key_len = read_vint32(data_buf + pos, &vlen);
+      pos += vlen;
+      uint32_t value_len = read_vint32(data_buf + pos + key_len + 1, &vlen);
+      bool is_found = sqib.get((char *) data_buf + pos, key_len, &len, value_buf);
+      if (!is_found)
+        null_ctr++;
+      check_value((char *) data_buf + pos, key_len,
+              (char *) data_buf + pos + key_len + vlen + 1, value_len, value_buf, len, cmp);
+      pos += key_len + value_len + vlen + 1;
+      ctr++;
+  }
+  free(data_buf);
+  if (cmp > 0 || null_ctr > 0) {
+    cout << "Failed! Null: " << null_ctr << ", Cmp: " << cmp << endl;
+    return false;
+  }
+
+  return true;
+}
+
+bool test_random_data(long start_count, int cache_size) {
+  for (int i = 9; i < 17; i++) {
+    char filename[30];
+    int page_size = 1 << i;
+    sprintf(filename, "test_%d.db", page_size);
+    bool ret = test_random_data(page_size, start_count, cache_size, filename);
+    if (!ret)
+      return false;
+    char cmd[100];
+    sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
+    int sysret = system(cmd);
+    if (sysret) {
+      cout << "Integrity check failed" << endl;
+      return false;
+    }
+  }
+  return true;
+}
+
+int main(int argc, char *argv[]) {
+
+  if (argc == 8 && strcmp(argv[1], "-c") == 0) {
+    create_db(argc, argv);
+  } else
+  if (argc > 6 && strcmp(argv[1], "-i") == 0) {
+    insert_db(argc, argv);
+  } else
+  if (argc == 7 && strcmp(argv[1], "-r") == 0) {
+    read_db(argc, argv);
+  } else
+  if (argc == 2 && strcmp(argv[1], "-t") == 0) {
+    // test with lowest possible cache size
+    if (test_random_data(150000, 256)) {
+      // test file > 1gb
+      if (test_random_data(1500000, 512 * 1024)) {
+      }
+    }
+  } else
+    print_usage();
+
+  return 0;
+
+}
+#endif

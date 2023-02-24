@@ -380,8 +380,10 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             int hdr_len = 0;
             for (int i = 0; i < col_count; i++) {
                 int val_len_hdr_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
-                if (types == NULL || types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB)
-                    val_len_hdr_len = value_lens[i] * 2 + (types == NULL ? 13 : types[i]);
+                if (types == NULL || types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB) {
+                    val_len_hdr_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]) * 2
+                                             + (types == NULL ? 13 : types[i]);
+                }
                 hdr_len += get_vlen_of_uint16(val_len_hdr_len);
             }
             int offset = get_offset();
@@ -711,9 +713,9 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
         ~sqlite_index_blaster() {
         }
 
-        int make_new_rec(uint8_t *ptr, const void *values[], 
+        int make_new_rec(uint8_t *ptr, int col_count, const void *values[], 
                 const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
-            return write_new_rec(-1, 0, column_count, values, value_lens, types, ptr);
+            return write_new_rec(-1, 0, col_count, values, value_lens, types, ptr);
         }
 
         uint8_t *locate_col(int which_col, uint8_t *rec, int& col_type_or_len, int& col_len, int& col_type) {

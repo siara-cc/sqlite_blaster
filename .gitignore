@@ -1,3 +1,4 @@
 *.db
 test_sqlite_blaster
+test_sqlite_blaster.dSYM
 

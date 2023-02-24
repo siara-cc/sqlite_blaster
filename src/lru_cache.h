@@ -61,6 +61,7 @@ protected:
 #endif
     uint8_t empty;
     cache_stats stats;
+    long max_pages_to_flush;
     void *(*malloc_fn)(size_t);
     bool (*const is_changed_fn)(uint8_t *, int);
     void (*const set_changed_fn)(uint8_t *, int, bool);
@@ -133,16 +134,14 @@ if (page_size == 4096) {
     }
     void calc_flush_count() {
         if (stats.total_cache_req == 0) {
-          stats.last_pages_to_flush = 20;
+          stats.last_pages_to_flush = max_pages_to_flush < 20 ? max_pages_to_flush : 20;
           return;
         }
-        stats.last_pages_to_flush = 500; //cache_size_in_pages * stats.total_cache_misses / stats.total_cache_req;
-        if (stats.last_pages_to_flush < cache_size_in_pages / 2000)
-            stats.last_pages_to_flush = cache_size_in_pages / 2000;
-        if (stats.last_pages_to_flush > cache_size_in_pages / 5)
-           stats.last_pages_to_flush = cache_size_in_pages / 5;
-        if (stats.last_pages_to_flush < 20)
-           stats.last_pages_to_flush = 20;
+        stats.last_pages_to_flush = max_pages_to_flush; //cache_size_in_pages * stats.total_cache_misses / stats.total_cache_req;
+        if (stats.last_pages_to_flush > 500)
+           stats.last_pages_to_flush = 500;
+        if (stats.last_pages_to_flush < 2)
+           stats.last_pages_to_flush = 2;
     }
     void flush_pages_in_seq(uint8_t *block_to_keep) {
         if (lnklst_last_entry == NULL)
@@ -201,7 +200,7 @@ public:
     size_t file_page_count;
     int cache_size_in_pages;
     uint8_t *page_cache;
-    lru_cache(int pg_size, int cache_size_mb, const char *fname,
+    lru_cache(int pg_size, int cache_size_kb, const char *fname,
             bool (*is_changed)(uint8_t *, int), void (*set_changed)(uint8_t *, int, bool),
             int init_page_count = 0, void *(*alloc_fn)(size_t) = NULL)
                 : is_changed_fn (is_changed), set_changed_fn (set_changed) {
@@ -209,7 +208,7 @@ public:
             alloc_fn = malloc;
         malloc_fn = alloc_fn;
         page_size = pg_size;
-        cache_size_in_pages = cache_size_mb * 1024 * 1024 / page_size;
+        cache_size_in_pages = cache_size_kb * 1024 / page_size;
         cache_occupied_size = 0;
         lnklst_first_entry = lnklst_last_entry = NULL;
         strcpy(filename, fname);
@@ -219,6 +218,7 @@ public:
         memset(llarr, '\0', cache_size_in_pages * sizeof(dbl_lnklst));
         skip_page_count = init_page_count;
         file_page_count = init_page_count;
+        max_pages_to_flush = cache_size_in_pages / 2;
         struct stat file_stat;
         memset(&file_stat, '\0', sizeof(file_stat));
 #if USE_FOPEN == 1
@@ -242,7 +242,7 @@ public:
         file_page_count = file_stat.st_size;
         if (file_page_count > 0)
            file_page_count /= page_size;
-        cout << "File page count: " << file_page_count << endl;
+        //cout << "File page count: " << file_page_count << endl;
         disk_to_cache_map_size = max(file_page_count + 1000, (size_t) cache_size_in_pages);
         disk_to_cache_map = (dbl_lnklst **) alloc_fn(disk_to_cache_map_size * sizeof(dbl_lnklst *));
         memset(disk_to_cache_map, '\0', disk_to_cache_map_size * sizeof(dbl_lnklst *));
@@ -293,9 +293,9 @@ public:
         free(root_block);
         free(llarr);
         free(disk_to_cache_map);
-        cout << "cache requests: " << " " << stats.total_cache_req 
-             << ", Misses: " << stats.total_cache_misses
-             << ", Flush#: " << stats.cache_flush_count << endl;
+        // cout << "cache requests: " << " " << stats.total_cache_req 
+        //      << ", Misses: " << stats.total_cache_misses
+        //      << ", Flush#: " << stats.cache_flush_count << endl;
     }
     int read_page(uint8_t *block, off_t file_pos, size_t bytes) {
 #if USE_FOPEN == 1
