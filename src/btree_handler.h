@@ -100,9 +100,9 @@ public:
     size_t block_size;
     int cache_size;
     const char *filename;
-    btree_handler(uint32_t block_sz = DEFAULT_BLOCK_SIZE, int cache_sz_mb = 0,
+    btree_handler(uint32_t block_sz = DEFAULT_BLOCK_SIZE, int cache_sz_kb = 0,
             const char *fname = NULL, int start_page_num = 0, bool whether_btree = false) :
-            block_size (block_sz), cache_size (cache_sz_mb & 0xFFFF), filename (fname) {
+            block_size (block_sz), cache_size (cache_sz_kb), filename (fname) {
         descendant->init_derived();
         init_stats();
         is_block_given = 0;

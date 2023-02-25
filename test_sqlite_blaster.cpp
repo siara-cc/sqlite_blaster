@@ -28,8 +28,13 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
+#include <fstream>
+#include <string>
+#include <sstream>
 
 #include "sqlite_index_blaster.h"
+
+using namespace std;
 
 void print_usage() {
   printf("\nTesting Sqlite Index Blaster\n");
@@ -213,7 +218,7 @@ uint32_t read_vint32(const uint8_t *ptr, int8_t *vlen) {
 #define CS_255_RANDOM 5
 #define CS_255_DENSE 6
 #define MIN_KEY_LEN 12
-int64_t insert(uint8_t **data_buf_ptr, int64_t data_sz, int KEY_LEN, int VALUE_LEN, int NUM_ENTRIES, int CHAR_SET, bool KEY_VALUE_VAR_LEN) {
+int64_t prepare_data(uint8_t **data_buf_ptr, int64_t data_sz, int KEY_LEN, int VALUE_LEN, int NUM_ENTRIES, int CHAR_SET, bool KEY_VALUE_VAR_LEN) {
     char k[KEY_LEN + 1];
     char v[VALUE_LEN + 1];
     int k_len = KEY_LEN;
@@ -313,6 +318,217 @@ void check_value(const char *key, int key_len, const char *val, int val_len,
       }
 }
 
+bool test_census(int page_size, int cache_size, const char *filename) {
+
+  unlink(filename);
+  sqlite_index_blaster *sqib = new sqlite_index_blaster(12, 3, 
+      (const char *[]) {"cum_prop100k", "rank", "name", "year", "count", "prop100k", "pctwhite", "pctblack", "pctapi", "pctaian", "pct2prace", "pcthispanic"},
+      "surnames", page_size, cache_size, filename);
+  ifstream file("sample_data/census.txt");
+  if (file.is_open()) {
+      string line;
+      while (getline(file, line)) {
+        stringstream ss(line);
+        string s;
+        int col_idx = 0;
+        uint32_t year, rank, count;
+        double cum_prop100k, prop100k, pctwhite, pctblack, pctapi, pctaian, pct2prace, pcthispanic;
+        string name;
+        while (getline(ss, s, '|')) {
+          switch (col_idx) {
+            case 0:
+              year = atoi(s.c_str());
+              // cout << year << ",";
+              break;
+            case 1:
+              name = s;
+              // cout << name << ",";
+              break;
+            case 2:
+              rank = atoi(s.c_str());
+              // cout << rank << ",";
+              break;
+            case 3:
+              count = atoi(s.c_str());
+              // cout << count << ",";
+              break;
+            case 4:
+              prop100k = atof(s.c_str());
+              // cout << prop100k << ",";
+              break;
+            case 5:
+              cum_prop100k = atof(s.c_str());
+              //cout << cum_prop100k;
+              break;
+            case 6:
+              pctwhite = atof(s.c_str());
+              //cout << pctwhite;
+              break;
+            case 7:
+              pctblack = atof(s.c_str());
+              //cout << pctblack;
+              break;
+            case 8:
+              pctapi = atof(s.c_str());
+              //cout << pctapi;
+              break;
+            case 9:
+              pctaian = atof(s.c_str());
+              //cout << pctaian;
+              break;
+            case 10:
+              pct2prace = atof(s.c_str());
+              //cout << pct2prace;
+              break;
+            case 11:
+              pcthispanic = atof(s.c_str());
+              //cout << pcthispanic;
+              break;
+          }
+          col_idx++;
+        }
+        if (col_idx < 12)
+          pcthispanic = 0;
+        //cout << endl;
+        uint8_t rec[line.length() + 500];
+        int rec_len = sqib->make_new_rec(rec, 12, 
+            (const void *[]) {&cum_prop100k, &rank, name.c_str(), &year, &count, &prop100k, 
+                              &pctwhite, &pctblack, &pctapi, &pctaian, &pct2prace, &pcthispanic},
+            NULL, (uint8_t[]) {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
+                               SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL});
+        sqib->put(rec, -rec_len, NULL, 0);
+      }
+      file.close();
+  }
+  delete sqib;
+  char cmd[500];
+  sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
+  int sysret = system(cmd);
+  if (sysret) {
+    cout << "Integrity check failed" << endl;
+    return false;
+  }
+  sprintf(cmd, "sqlite3 %s \"select cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi,"
+                 " pctaian, pct2prace, pcthispanic from surnames order by name, rank\" > census.txt", filename);
+  sysret = system(cmd);
+  strcpy(cmd, "cmp census.txt sample_data/census_cmp.txt");
+  sysret = system(cmd);
+  if (sysret) {
+    cout << filename << " compare failed" << endl;
+    return false;
+  }
+      
+  return true;
+
+}
+
+bool test_census() {
+  for (int i = 9; i < 17; i++) {
+    char filename[30];
+    int page_size = 1 << i;
+    sprintf(filename, "census_%d.db", page_size);
+    cout << "Testing " << filename << endl;
+    bool ret = test_census(page_size, 4096, filename);
+    if (!ret)
+      return false;
+  }
+  return true;
+}
+
+bool test_babynames(int page_size, int cache_size, const char *filename) {
+
+  unlink(filename);
+  sqlite_index_blaster *sqib = new sqlite_index_blaster(7, 3, 
+      (const char *[]) {"year", "state", "name", "total_babies", "primary_sex", "primary_sex_ratio", "per_100k_in_state"},
+      "gendered_names", page_size, cache_size, filename);
+  ifstream file("sample_data/babynames.txt");
+  if (file.is_open()) {
+      string line;
+      while (getline(file, line)) {
+        stringstream ss(line);
+        string s;
+        int col_idx = 0;
+        uint32_t year, total_babies;
+        double per_100k_in_state, primary_sex_ratio;
+        string state, name, primary_sex;
+        while (getline(ss, s, '|')) {
+          switch (col_idx) {
+            case 0:
+              year = atoi(s.c_str());
+              // cout << year << ",";
+              break;
+            case 1:
+              state = s;
+              // cout << state << ",";
+              break;
+            case 2:
+              name = s;
+              // cout << name << ",";
+              break;
+            case 3:
+              total_babies = atoi(s.c_str());
+              // cout << total_babies<< ",";
+              break;
+            case 4:
+              primary_sex = s;
+              // cout << primary_sex << ",";
+              break;
+            case 5:
+              primary_sex_ratio = atof(s.c_str());
+              // cout << primary_sex_ratio << ",";
+              break;
+            case 6:
+              per_100k_in_state = atof(s.c_str());
+              //cout << per_100k_in_state;
+              break;
+          }
+          col_idx++;
+        }
+        if (col_idx < 7)
+            per_100k_in_state = 0;
+        //cout << endl;
+        uint8_t rec[line.length() + 100];
+        int rec_len = sqib->make_new_rec(rec, 7, 
+            (const void *[]) {&year, state.c_str(), name.c_str(), &total_babies, primary_sex.c_str(), &primary_sex_ratio, &per_100k_in_state},
+            NULL, (uint8_t[]) {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_REAL, SQLT_TYPE_REAL});
+        sqib->put(rec, -rec_len, NULL, 0);
+      }
+      file.close();
+  }
+  delete sqib;
+  char cmd[100];
+  sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
+  int sysret = system(cmd);
+  if (sysret) {
+    cout << "Integrity check failed" << endl;
+    return false;
+  }
+  sprintf(cmd, "sqlite3 %s \"select * from gendered_names order by state,name\" > babynames.txt", filename);
+  sysret = system(cmd);
+  strcpy(cmd, "cmp babynames.txt sample_data/babynames_cmp.txt");
+  sysret = system(cmd);
+  if (sysret) {
+    cout << filename << " compare failed" << endl;
+    return false;
+  }
+      
+  return true;
+
+}
+
+bool test_babynames() {
+  for (int i = 9; i < 17; i++) {
+    char filename[30];
+    int page_size = 1 << i;
+    sprintf(filename, "babynames_%d.db", page_size);
+    cout << "Testing " << filename << endl;
+    bool ret = test_babynames(page_size, 4096, filename);
+    if (!ret)
+      return false;
+  }
+  return true;
+}
+
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
   unlink(filename);
   int U = page_size - 5;
@@ -322,7 +538,7 @@ bool test_random_data(int page_size, long start_count, int cache_size, char *fil
   int NUM_ENTRIES = start_count * 512 / page_size;
   int64_t data_alloc_sz = 64 * 1024 * 1024;
   uint8_t *data_buf = (uint8_t *) malloc(data_alloc_sz);
-  int64_t data_sz = insert(&data_buf, data_alloc_sz, KEY_LEN, VALUE_LEN, NUM_ENTRIES, 1, true);
+  int64_t data_sz = prepare_data(&data_buf, data_alloc_sz, KEY_LEN, VALUE_LEN, NUM_ENTRIES, 1, true);
   cout << "Testing page size: " << page_size << ", count: " << NUM_ENTRIES
        << ", Data size: " << data_sz / 1000 << "kb" << ", Cache size: " << cache_size << "kb" << endl;
   sqlite_index_blaster sqib(2, 1, (const char *[]) {"key", "value"}, "imain", page_size, cache_size, filename);
@@ -392,12 +608,20 @@ int main(int argc, char *argv[]) {
     read_db(argc, argv);
   } else
   if (argc == 2 && strcmp(argv[1], "-t") == 0) {
+    int ret = 1;
     // test with lowest possible cache size
     if (test_random_data(150000, 256)) {
       // test file > 1gb
       if (test_random_data(1500000, 512 * 1024)) {
+        if (test_babynames()) {
+          if (test_census()) {
+            cout << "All tests ok" << endl;
+            ret = 0;
+          }
+        }
       }
     }
+    return ret;
   } else
     print_usage();
 

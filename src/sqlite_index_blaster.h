@@ -12,7 +12,7 @@ using namespace std;
 // TODO: decide whether needed
 #define page_resv_bytes 5
 
-const int8_t col_data_lens[] = {0, 1, 2, 3, 4, 6, 8, 8};
+const int8_t col_data_lens[] = {0, 1, 2, 3, 4, 6, 8, 8, 0, 0};
 
 enum {SQLT_TYPE_NULL = 0, SQLT_TYPE_INT8, SQLT_TYPE_INT16, SQLT_TYPE_INT24, SQLT_TYPE_INT32, SQLT_TYPE_INT48, SQLT_TYPE_INT64,
         SQLT_TYPE_REAL, SQLT_TYPE_INT0, SQLT_TYPE_INT1, SQLT_TYPE_BLOB = 12, SQLT_TYPE_TEXT = 13};
@@ -323,7 +323,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 if (col_type_or_len % 2)
                     return (col_type_or_len - 13)/2;
                 return (col_type_or_len - 12)/2; 
-            } else if (col_type_or_len < 8)
+            } else if (col_type_or_len < 10)
                 return col_data_lens[col_type_or_len];
             return 0;
         }
@@ -334,7 +334,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 if (col_type_or_len % 2)
                     return SQLT_TYPE_TEXT;
                 return SQLT_TYPE_BLOB;
-            } else if (col_type_or_len < 8)
+            } else if (col_type_or_len < 10)
                 return col_type_or_len;
             return 0;
         }
@@ -371,18 +371,23 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             return (current_block[0] == 2 || current_block[0] == 5 || current_block[0] == 10 || current_block[0] == 13 ? 0 : 100);
         }
 
+        int get_data_len(int i, const uint8_t types[], const void *values[]) {
+            if (types == NULL || types[i] >= 10)
+                return strlen((const char *) values[i]);
+            return col_data_lens[types[i]];
+        }
+
         int write_new_rec(int pos, int64_t rowid, int col_count, const void *values[],
                 const size_t value_lens[] = NULL, const uint8_t types[] = NULL, uint8_t *ptr = NULL) {
 
             int data_len = 0;
             for (int i = 0; i < col_count; i++)
-                data_len += (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                data_len += (value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
             int hdr_len = 0;
             for (int i = 0; i < col_count; i++) {
-                int val_len_hdr_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                int val_len_hdr_len = (value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
                 if (types == NULL || types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB) {
-                    val_len_hdr_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]) * 2
-                                             + (types == NULL ? 13 : types[i]);
+                    val_len_hdr_len = val_len_hdr_len * 2 + (types == NULL ? 13 : types[i]);
                 }
                 hdr_len += get_vlen_of_uint16(val_len_hdr_len);
             }
@@ -419,15 +424,15 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             ptr += write_vint32(ptr, hdr_len);
             for (int i = 0; i < col_count; i++) {
                 uint8_t type = (types == NULL ? SQLT_TYPE_TEXT : types[i]);
-                int value_len = (value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                int value_len = (value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
                 int col_len_in_hdr = (type == SQLT_TYPE_TEXT || type == SQLT_TYPE_BLOB)
-                        ? value_len * 2 + type : col_data_lens[type];
+                        ? value_len * 2 + type : type;
                 ptr += write_vint32(ptr, col_len_in_hdr);
             }
             for (int i = 0; i < col_count; i++) {
                 if (value_lens == NULL || value_lens[i] > 0) {
                     ptr += write_data(ptr, types == NULL ? SQLT_TYPE_TEXT : types[i],
-                        values[i], value_lens == NULL ? strlen((const char *) values[i]) : value_lens[i]);
+                        values[i], value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
                 }
             }
 
