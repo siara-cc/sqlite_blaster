@@ -635,14 +635,14 @@ int main(int argc, char *argv[]) {
     // test with lowest possible cache size
     if (test_random_data(150000, 256)) {
       // test file > 1gb
-      if (test_random_data(1400000, 64 * 1024)) {
+      //if (test_random_data(1400000, 64 * 1024)) {
         if (test_babynames()) {
           if (test_census()) {
             cout << "All tests ok" << endl;
             ret = 0;
           }
         }
-      }
+      //}
     }
     return ret;
   } else

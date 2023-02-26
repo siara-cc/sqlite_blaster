@@ -17,5 +17,6 @@ jobs:
       run: make
     - name: show_free
       run: free -m
+      run: df -h
     - name: test
       run: ./test_sqlite_blaster -t
