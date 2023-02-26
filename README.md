@@ -216,7 +216,7 @@ Valentine's Day,Comedy,Warner Bros.
 - Deletes are not implemented yet.  This library is intended primarily for fast inserts.
 - Support for concurrent inserts not implemented yet.
 - The regular ROWID table of Sqlite is not implemented.
-- Key lengths are limited depending on page size as shown in the table below.  However, this is just because the source code does not implement support for longer keys. However, this is considered sufficient for most practical purposes.
+- Key lengths are limited depending on page size as shown in the table below.  This is just because the source code does not implement support for longer keys. However, this is considered sufficient for most practical purposes.
 
   | **Page Size** | **Max Key Length** |
   | ------------- | ------------------ |
@@ -237,10 +237,10 @@ So this repo is best suited for one time inserts of large datasets, power backed
 
 # License
 
-The MIT License
-The GNU Affero General Public License v3 (AGPL-3.0)
+Sqlite Index Blaster and its command line tools are dual-licensed under the MIT license and the AGPL-3.0.  Users may choose one of the above.
 
-sqlite_index_blaster and its command line tools are dual-licensed under the MIT license and the AGPL-3.0.  Users may choose one of the above.
+- The MIT License
+- The GNU Affero General Public License v3 (AGPL-3.0)
 
 # Support
 
