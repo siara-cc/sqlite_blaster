@@ -12,6 +12,8 @@ There are a number of choices available for fast insertion of records, such as R
 
 This library was created for inserting/updating billions of entries for arriving at word/phrase frequencies for building dictionaries for the [Unishox](https://github.com/siara-cc/Unishox) project using publicly available texts and conversations.
 
+Furthermore, the other choices don't have the same number of IDEs or querying abilities of the most popular Sqlite data format.
+
 # Applications
 
 - Lightning fast index creation for huge datasets
