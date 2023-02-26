@@ -15,8 +15,9 @@ jobs:
     - uses: actions/checkout@v2
     - name: make
       run: make
-    - name: show_free
+    - name: show_mem_free
       run: free -m
+    - name: show_disk_free
       run: df -h
     - name: test
       run: ./test_sqlite_blaster -t
