@@ -72,39 +72,37 @@ bool validate_page_size(int32_t page_size) {
   return false;
 }
 
-void read_csv(char **out, char *csv, int col_count, bool allow_spaces) {
+void read_csv(char *out[], char *csv, int col_count, bool is_name) {
   uint8_t *p = (uint8_t *) csv;
   char name[100];
   int col_idx = 0;
   int col_len = 0;
   while (*p != '\0') {
-    if (*p == ' ' && !allow_spaces) {
+    if (is_name && (*p == ' ' || *p == '-' || (col_len == 0 && *p >= '0' && *p <= '9'))) {
       p++;
       continue;
     }
-    if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_'
-          || *p == ' ' || (col_len > 0 && *p >= '0' && *p <= '9') || *p > 127) {
+    if ((*p >= ' ' && *p <= '~' && *p != ',') || *p > 127)
       name[col_len++] = *p;
-    }
     if (*p == ',') {
-      out[col_idx] = (char *) malloc(col_len + 1);
-      char *col_name = out[col_idx];
-      memcpy(col_name, name, col_len);
-      out[col_len] = 0;
+      if ((col_idx + 1) == col_count)
+        break;
+      out[col_idx] = new char[col_len + 1];
+      memcpy(out[col_idx], name, col_len);
+      out[col_idx][col_len] = 0;
       col_idx++;
       col_len = 0;
     }
     p++;
   }
-  out[col_idx] = (char *) malloc(col_len + 1);
-  char *col_name = out[col_idx];
-  memcpy(col_name, name, col_len);
-  col_name[col_len] = 0;
+  out[col_idx] = new char[col_len + 1];
+  memcpy(out[col_idx], name, col_len);
+  out[col_idx][col_len] = 0;
 }
 
 void release_parsed_csv(char *parsed_csv[], int col_count) {
   for (int i = 0; i < col_count; i++) {
-    free(parsed_csv[i]);
+     delete parsed_csv[i];
   }
 }
 
@@ -117,8 +115,10 @@ int create_db(int argc, char *argv[]) {
   unlink(argv[2]);
   char *col_names[col_count];
   const char **const_col_names = (const char **) col_names;
-  read_csv(col_names, argv[7], col_count, false);
-  sqlite_index_blaster sqib(col_count, pk_col_count, const_col_names, argv[4], page_size, 40, argv[2]);
+  cout << "Creating db " << argv[2] << ", table " << argv[4] << ", page size: " << page_size << endl;
+  cout << "Col count: " << col_count << ", pk count: " << pk_col_count << ", Cols: " << argv[7] << endl;
+  read_csv(col_names, argv[7], col_count, true);
+  sqlite_index_blaster sqib(col_count, pk_col_count, const_col_names, argv[4], page_size, 400, argv[2]);
   release_parsed_csv(col_names, col_count);
   return SQLT_RES_OK;
 }
@@ -137,10 +137,10 @@ int insert_db(int argc, char *argv[]) {
   int col_count = atoi(argv[4]);
   int pk_col_count = atoi(argv[5]);
   sqlite_index_blaster sqib(col_count, pk_col_count, (const char *[]) {""}, "", page_size, 320, argv[2]);
+  char *parsed_csv[col_count];
   for (int i = 0; i < argc-6; i++) {
-    char *parsed_csv[col_count];
-    read_csv(parsed_csv, argv[6 + i], col_count, true);
-    uint8_t rec[strlen(argv[6+i]+20)];
+    read_csv(parsed_csv, argv[6 + i], col_count, false);
+    uint8_t rec[strlen(argv[6+i])+20];
     int rec_len = sqib.make_new_rec(rec, col_count, (const void **) parsed_csv);
     sqib.put(rec, -rec_len, NULL, 0);
     release_parsed_csv(parsed_csv, col_count);
@@ -162,7 +162,7 @@ int read_db(int argc, char *argv[]) {
   int val_len = 2000;
   uint8_t *val = (uint8_t *) malloc(val_len);
   char *parsed_csv[pk_col_count];
-  read_csv(parsed_csv, argv[6], pk_col_count, true);
+  read_csv(parsed_csv, argv[6], pk_col_count, false);
   uint8_t pk_rec[strlen(argv[6])+20];
   int pk_rec_len = sqib.make_new_rec(pk_rec, pk_col_count, (const void **) parsed_csv);
   if (sqib.get(pk_rec, -pk_rec_len, &rec_len, rec)) {
@@ -393,7 +393,7 @@ bool test_census(int page_size, int cache_size, const char *filename) {
         uint8_t rec[line.length() + 500];
         int rec_len = sqib->make_new_rec(rec, 12, 
             (const void *[]) {&cum_prop100k, &rank, name.c_str(), &year, &count, &prop100k, 
-                              &pctwhite, &pctblack, &pctapi, &pctaian, &pct2prace, &pcthispanic},
+                                  &pctwhite, &pctblack, &pctapi, &pctaian, &pct2prace, &pcthispanic},
             NULL, (uint8_t[]) {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
                                SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL});
         sqib->put(rec, -rec_len, NULL, 0);

@@ -1433,6 +1433,16 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             return read_uint32(ptr) - 1;
         }
 
+        // bool next(bptree_iter_ctx *ctx, int *in_size_out_val_len = NULL, uint8_t *val = NULL) {
+        //     ctx->found_page_idx;
+        //     ctx->found_page_pos;
+        //     ctx->last_page_lvl;
+        //     ctx->pages;
+        //     if (val != NULL)
+        //         copy_value(val, in_size_out_val_len);
+        //     return true;
+        // }
+
         uint8_t *find_split_source(int search_result) {
             return NULL;
         }

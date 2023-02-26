@@ -4,3 +4,5 @@ test_sqlite_blaster
 test_sqlite_blaster.dSYM
 *.txt
 !sample_data/*.txt
+test.cpp
+a.out
