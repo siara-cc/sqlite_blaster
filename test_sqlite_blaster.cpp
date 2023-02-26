@@ -128,6 +128,8 @@ bool file_exists(const char *filename) {
   return (stat(filename, &buffer) == 0);
 }
 
+const char *empty_cols[] = {""};
+
 int insert_db(int argc, char *argv[]) {
   if (!file_exists(argv[2]))
     cout << "File does not exist" << endl;
@@ -136,7 +138,7 @@ int insert_db(int argc, char *argv[]) {
     return SQLT_RES_ERR;
   int col_count = atoi(argv[4]);
   int pk_col_count = atoi(argv[5]);
-  sqlite_index_blaster sqib(col_count, pk_col_count, (const char *[]) {""}, "", page_size, 320, argv[2]);
+  sqlite_index_blaster sqib(col_count, pk_col_count, empty_cols, "", page_size, 320, argv[2]);
   char *parsed_csv[col_count];
   for (int i = 0; i < argc-6; i++) {
     read_csv(parsed_csv, argv[6 + i], col_count, false);
@@ -156,7 +158,7 @@ int read_db(int argc, char *argv[]) {
     return SQLT_RES_ERR;
   int col_count = atoi(argv[4]);
   int pk_col_count = atoi(argv[5]);
-  sqlite_index_blaster sqib(col_count, pk_col_count, (const char *[]) {""}, "", page_size, 320, argv[2]);
+  sqlite_index_blaster sqib(col_count, pk_col_count, empty_cols, "", page_size, 320, argv[2]);
   int rec_len = 10000;
   uint8_t *rec = (uint8_t *) malloc(rec_len);
   int val_len = 2000;
@@ -318,12 +320,15 @@ void check_value(const char *key, int key_len, const char *val, int val_len,
       }
 }
 
+const char *census_col_names[] = {"cum_prop100k", "rank", "name", "year", "count", "prop100k", "pctwhite", "pctblack", "pctapi", "pctaian", "pct2prace", "pcthispanic"};
+const void *census_col_values[12];
+const uint8_t census_col_types[] = {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
+                               SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
+
 bool test_census(int page_size, int cache_size, const char *filename) {
 
   unlink(filename);
-  sqlite_index_blaster *sqib = new sqlite_index_blaster(12, 3, 
-      (const char *[]) {"cum_prop100k", "rank", "name", "year", "count", "prop100k", "pctwhite", "pctblack", "pctapi", "pctaian", "pct2prace", "pcthispanic"},
-      "surnames", page_size, cache_size, filename);
+  sqlite_index_blaster *sqib = new sqlite_index_blaster(12, 3, census_col_names, "surnames", page_size, cache_size, filename);
   ifstream file("sample_data/census.txt");
   if (file.is_open()) {
       string line;
@@ -391,11 +396,19 @@ bool test_census(int page_size, int cache_size, const char *filename) {
           pcthispanic = 0;
         //cout << endl;
         uint8_t rec[line.length() + 500];
-        int rec_len = sqib->make_new_rec(rec, 12, 
-            (const void *[]) {&cum_prop100k, &rank, name.c_str(), &year, &count, &prop100k, 
-                                  &pctwhite, &pctblack, &pctapi, &pctaian, &pct2prace, &pcthispanic},
-            NULL, (uint8_t[]) {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
-                               SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL});
+        census_col_values[0] = &cum_prop100k;
+        census_col_values[1] = &rank;
+        census_col_values[2] = (const void *) name.c_str();
+        census_col_values[3] = &year;
+        census_col_values[4] = &count;
+        census_col_values[5] = &prop100k;
+        census_col_values[6] = &pctwhite;
+        census_col_values[7] = &pctblack;
+        census_col_values[8] = &pctapi;
+        census_col_values[9] = &pctaian;
+        census_col_values[10] = &pct2prace;
+        census_col_values[11] = &pcthispanic;
+        int rec_len = sqib->make_new_rec(rec, 12, census_col_values, NULL, census_col_types);
         sqib->put(rec, -rec_len, NULL, 0);
       }
       file.close();
@@ -435,12 +448,15 @@ bool test_census() {
   return true;
 }
 
+const char *baby_col_names[] = {"year", "state", "name", "total_babies", "primary_sex", "primary_sex_ratio", "per_100k_in_state"};
+const uint8_t baby_col_types[] = {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
+const void *baby_col_values[7];
+
 bool test_babynames(int page_size, int cache_size, const char *filename) {
 
   unlink(filename);
-  sqlite_index_blaster *sqib = new sqlite_index_blaster(7, 3, 
-      (const char *[]) {"year", "state", "name", "total_babies", "primary_sex", "primary_sex_ratio", "per_100k_in_state"},
-      "gendered_names", page_size, cache_size, filename);
+  sqlite_index_blaster *sqib = new sqlite_index_blaster(7, 3, baby_col_names,
+                                  "gendered_names", page_size, cache_size, filename);
   ifstream file("sample_data/babynames.txt");
   if (file.is_open()) {
       string line;
@@ -488,9 +504,14 @@ bool test_babynames(int page_size, int cache_size, const char *filename) {
             per_100k_in_state = 0;
         //cout << endl;
         uint8_t rec[line.length() + 100];
-        int rec_len = sqib->make_new_rec(rec, 7, 
-            (const void *[]) {&year, state.c_str(), name.c_str(), &total_babies, primary_sex.c_str(), &primary_sex_ratio, &per_100k_in_state},
-            NULL, (uint8_t[]) {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_REAL, SQLT_TYPE_REAL});
+        baby_col_values[0] = &year;
+        baby_col_values[1] = (const void *) state.c_str();
+        baby_col_values[2] = (const void *) name.c_str();
+        baby_col_values[3] = &total_babies;
+        baby_col_values[4] = (const void *) primary_sex.c_str();
+        baby_col_values[5] = &primary_sex_ratio;
+        baby_col_values[6] = &per_100k_in_state;
+        int rec_len = sqib->make_new_rec(rec, 7, baby_col_values, NULL, baby_col_types);
         sqib->put(rec, -rec_len, NULL, 0);
       }
       file.close();
@@ -529,6 +550,8 @@ bool test_babynames() {
   return true;
 }
 
+const char *const_kv[] = {"key", "value"};
+
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
   unlink(filename);
   int U = page_size - 5;
@@ -541,7 +564,7 @@ bool test_random_data(int page_size, long start_count, int cache_size, char *fil
   int64_t data_sz = prepare_data(&data_buf, data_alloc_sz, KEY_LEN, VALUE_LEN, NUM_ENTRIES, 1, true);
   cout << "Testing page size: " << page_size << ", count: " << NUM_ENTRIES
        << ", Data size: " << data_sz / 1000 << "kb" << ", Cache size: " << cache_size << "kb" << endl;
-  sqlite_index_blaster sqib(2, 1, (const char *[]) {"key", "value"}, "imain", page_size, cache_size, filename);
+  sqlite_index_blaster sqib(2, 1, const_kv, "imain", page_size, cache_size, filename);
   for (int64_t pos = 0; pos < data_sz; pos++) {
       int8_t vlen;
       uint32_t key_len = read_vint32(data_buf + pos, &vlen);
