@@ -15,14 +15,10 @@
 #include <errno.h>
 #include <cstring>
 #include <time.h>
-#include <chrono>
-#include <brotli/encode.h>
+//#include <brotli/encode.h>
 //#include <snappy.h>
 
 #define USE_FOPEN 1
-
-using namespace std;
-using namespace chrono;
 
 typedef struct dbl_lnklst_st {
     int disk_page;
@@ -52,7 +48,7 @@ protected:
     dbl_lnklst **disk_to_cache_map;
     size_t disk_to_cache_map_size;
     dbl_lnklst *llarr;
-    set<int> new_pages;
+    std::set<int> new_pages;
     char filename[100];
 #if USE_FOPEN == 1
     FILE *fp;
@@ -65,10 +61,8 @@ protected:
     void *(*malloc_fn)(size_t);
     bool (*const is_changed_fn)(uint8_t *, int);
     void (*const set_changed_fn)(uint8_t *, int, bool);
-    void write_pages(set<int>& pages_to_write) {
-        time_point<steady_clock> start;
-        start = steady_clock::now();
-        for (set<int>::iterator it = pages_to_write.begin(); it != pages_to_write.end(); it++) {
+    void write_pages(std::set<int>& pages_to_write) {
+        for (std::set<int>::iterator it = pages_to_write.begin(); it != pages_to_write.end(); it++) {
             uint8_t *block = &page_cache[page_size * disk_to_cache_map[*it]->cache_loc];
             set_changed_fn(block, page_size, false);
             //if (page_size < 65537 && block[5] < 255)
@@ -147,7 +141,7 @@ if (page_size == 4096) {
         if (lnklst_last_entry == NULL)
             return;
         stats.cache_flush_count++;
-        set<int> pages_to_write(new_pages);
+        std::set<int> pages_to_write(new_pages);
         calc_flush_count();
         int pages_to_check = stats.last_pages_to_flush * 3;
         dbl_lnklst *cur_entry = lnklst_last_entry;
@@ -157,7 +151,7 @@ if (page_size == 4096) {
               if (is_changed_fn(block, page_size)) {
                 pages_to_write.insert(cur_entry->disk_page);
                 if (cur_entry->disk_page == 0 || !disk_to_cache_map[cur_entry->disk_page])
-                    cout << "Disk cache map entry missing" << endl;
+                    std::cout << "Disk cache map entry missing" << std::endl;
               }
               if (pages_to_write.size() > (stats.last_pages_to_flush + new_pages.size()))
                 break;
@@ -243,7 +237,7 @@ public:
         if (file_page_count > 0)
            file_page_count /= page_size;
         //cout << "File page count: " << file_page_count << endl;
-        disk_to_cache_map_size = max(file_page_count + 1000, (size_t) cache_size_in_pages);
+        disk_to_cache_map_size = std::max(file_page_count + 1000, (size_t) cache_size_in_pages);
         disk_to_cache_map = (dbl_lnklst **) alloc_fn(disk_to_cache_map_size * sizeof(dbl_lnklst *));
         memset(disk_to_cache_map, '\0', disk_to_cache_map_size * sizeof(dbl_lnklst *));
         empty = 0;
@@ -274,7 +268,7 @@ public:
     }
     ~lru_cache() {
         flush_pages_in_seq(0);
-        set<int> pages_to_write;
+        std::set<int> pages_to_write;
         for (size_t ll = 0; ll < cache_size_in_pages; ll++) {
             if (llarr[ll].disk_page == 0)
               continue;
@@ -307,7 +301,7 @@ public:
             }
             return read_count;
         } else {
-            cout << "file_pos: " << file_pos << errno << endl;
+            std::cout << "file_pos: " << file_pos << errno << std::endl;
         }
 #else
         if (lseek(fd, file_pos, SEEK_SET) != -1) {
@@ -343,7 +337,7 @@ public:
     }
     uint8_t *get_disk_page_in_cache(int disk_page, uint8_t *block_to_keep = NULL, bool is_new = false) {
         if (disk_page < skip_page_count)
-            cout << "WARNING: asking disk_page: " << disk_page << endl;
+            std::cout << "WARNING: asking disk_page: " << disk_page << std::endl;
         if (disk_page == skip_page_count)
             return root_block;
         int cache_pos = 0;
@@ -436,12 +430,12 @@ public:
                 off_t file_pos = page_size;
                 file_pos *= disk_page;
                 if (read_page(&page_cache[page_size * cache_pos], file_pos, page_size) != page_size)
-                    cout << "Unable to read: " << disk_page << endl;
+                    std::cout << "Unable to read: " << disk_page << std::endl;
                 stats.pages_read++;
             }
         } else {
             if (is_new)
-                cout << "WARNING: How was new page found in cache?" << endl;
+                std::cout << "WARNING: How was new page found in cache?" << std::endl;
             dbl_lnklst *current_entry = disk_to_cache_map[disk_page];
             if (lnklst_last_free == current_entry && lnklst_last_free != NULL
                     && lnklst_last_free->prev != NULL)

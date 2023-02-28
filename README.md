@@ -51,15 +51,16 @@ In this mode, a table is created with just 2 columns, `key` and `value` as shown
 
 ```c++
 #include "sqlite_index_blaster.h"
+#include <string>
+#include <vector>
 
 int main() {
 
-    // Use new and delete to have control of when the database is closed
-    sqlite_index_blaster *sqib = new sqlite_index_blaster(2, 1, 
-                (const char *[]) {"key", "value"}, "kv_index", 4096, 40, "kv_idx.db");
-    sqib->put("hello", 5, "world", 5);
-    delete sqib; // Close kv_kdx.db
+    std::vector<std::string> col_names = {"key", "value"}; // -std >= c++11
+    sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
+    sqib.put_string("hello", "world");
     return 0;
+    // db file is flushed and closed when sqib is destroyed
 
 }
 ```
@@ -84,18 +85,14 @@ To retrieve the inserted values, use `get` method as shown below
 
 ```c++
 #include "sqlite_index_blaster.h"
+#include <string>
+#include <vector>
 
 int main() {
-    sqlite_index_blaster *sqib = new sqlite_index_blaster(2, 1, 
-                (const char *[]) {"key", "value"}, "kv_index", 4096, 40, "kv_idx.db");
-    sqib->put("hello", 5, "world", 5);
-    char out_val[10];
-    int out_val_len = 10;
-    if (sqib->get("hello", 5, &out_val_len, out_val)) {
-        out_val[out_val_len] = '\0';
-        cout << "Value of hello is " << out_val << endl;
-    }
-    delete sqib;
+    std::vector<std::string> col_names = {"key", "value"}; // -std >= c++11
+    sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
+    sqib.put_string("hello", "world");
+    cout << "Value of hello is " << sqib.get_string("hello", "not_found") << endl;
     return 0;
 }
 ```
@@ -106,16 +103,17 @@ In this mode, a table is created with just 2 columns, `key` and `doc` as shown b
 
 ```c++
 #include "sqlite_index_blaster.h"
+#include <string>
+#include <vector>
 
 const char * json1 = "{\"name\": \"Alice\", \"age\": 25, \"email\": \"alice@example.com\"}";
 const char * json2 = "{\"name\": \"George\", \"age\": 32, \"email\": \"george@example.com\"}";
 
 int main() {
-    sqlite_index_blaster *sqib = new sqlite_index_blaster(2, 1,
-                (const char *[]) {"key", "doc"}, "doc_index", 4096, 40, "doc_store.db");
-    sqib->put("primary_contact", 15, json1, strlen(json1));
-    sqib->put("secondary_contact", 17, json2, strlen(json2));
-    delete sqib;
+    std::vector<std::string> col_names = {"key", "doc"}; // -std >= c++11
+    sqlite_index_blaster sqib(2, 1, col_names, "doc_index", 4096, 40, "doc_store.db");
+    sqib.put_string("primary_contact", json1);
+    sqib.put_string("secondary_contact", json2);
     return 0;
 }
 ```
@@ -134,15 +132,17 @@ This repo can be used to create regular tables with primary key(s) as shown belo
 
 ```c++
 #include <cmath>
+#include <string>
+#include <vector>
+
 #include "sqlite_index_blaster.h"
 
 const uint8_t col_types[] = {SQLT_TYPE_TEXT, SQLT_TYPE_INT8, SQLT_TYPE_INT8, SQLT_TYPE_INT8, SQLT_TYPE_INT8, SQLT_TYPE_REAL};
 
 int main() {
 
-    sqlite_index_blaster *sqib = new sqlite_index_blaster(6, 2,
-            (const char *[]) {"student_name", "age", "maths_marks", "physics_marks", "chemistry_marks", "average_marks"},
-            "student_marks", 4096, 40, "student_marks.db");
+    std::vector<std::string> col_names = {"student_name", "age", "maths_marks", "physics_marks", "chemistry_marks", "average_marks"};
+    sqlite_index_blaster sqib(6, 2, col_names, "student_marks", 4096, 40, "student_marks.db");
 
     int8_t maths, physics, chemistry, age;
     double average;
@@ -150,18 +150,17 @@ int main() {
     int rec_len;
 
     age = 19; maths = 80; physics = 69; chemistry = 98; average = round((maths + physics + chemistry) * 100 / 3) / 100;
-    rec_len = sqib->make_new_rec(rec_buf, 6, (const void *[]) {"Robert", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
-    sqib->put(rec_buf, -rec_len, NULL, 0);
+    rec_len = sqib.make_new_rec(rec_buf, 6, (const void *[]) {"Robert", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
+    sqib.put(rec_buf, -rec_len, NULL, 0);
 
     age = 20; maths = 82; physics = 99; chemistry = 83; average = round((maths + physics + chemistry) * 100 / 3) / 100;
-    rec_len = sqib->make_new_rec(rec_buf, 6, (const void *[]) {"Barry", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
-    sqib->put(rec_buf, -rec_len, NULL, 0);
+    rec_len = sqib.make_new_rec(rec_buf, 6, (const void *[]) {"Barry", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
+    sqib.put(rec_buf, -rec_len, NULL, 0);
 
     age = 23; maths = 84; physics = 89; chemistry = 74; average = round((maths + physics + chemistry) * 100 / 3) / 100;
-    rec_len = sqib->make_new_rec(rec_buf, 6, (const void *[]) {"Elizabeth", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
-    sqib->put(rec_buf, -rec_len, NULL, 0);
+    rec_len = sqib.make_new_rec(rec_buf, 6, (const void *[]) {"Elizabeth", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
+    sqib.put(rec_buf, -rec_len, NULL, 0);
 
-    delete sqib;
     return 0;
 }
 ```
@@ -233,7 +232,7 @@ Valentine's Day,Comedy,Warner Bros.
 
 This code has been tested with more than 200 million records, so it is expected to be quite stable, but bear in mind that this is so fast because there is no crash recovery.
 
-So this repo is best suited for one time inserts of large datasets, power backed systems such as those hosted in Cloud and battery backed systems.
+So this repo is best suited for one time inserts of large datasets.  It may be suitable for power backed systems such as those hosted in Cloud and battery backed systems.
 
 # License
 

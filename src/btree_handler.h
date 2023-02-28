@@ -6,8 +6,6 @@
 #include <stdint.h>
 #include "lru_cache.h"
 
-using namespace std;
-
 #define BPT_LEAF0_LVL 14
 #define BPT_STAGING_LVL 15
 #define BPT_PARENT0_LVL 16
@@ -40,8 +38,6 @@ class util {
         return (len1 < len2 ? -k : k);
     }
 };
-
-#define descendant static_cast<T*>(this)
 
 union page_ptr {
     unsigned long page;
@@ -83,6 +79,7 @@ protected:
     int max_key_len;
     int is_block_given;
     int root_page_num;
+    bool is_closed;
 
 public:
     lru_cache *cache;
@@ -105,6 +102,7 @@ public:
             block_size (block_sz), cache_size (cache_sz_kb), filename (fname) {
         descendant->init_derived();
         init_stats();
+        is_closed = false;
         is_block_given = 0;
         root_page_num = start_page_num;
         is_btree = whether_btree;
@@ -129,6 +127,7 @@ public:
     btree_handler(uint32_t block_sz, uint8_t *block, bool is_leaf, bool should_init = true) :
             block_size (block_sz), cache_size (0), filename (NULL) {
         is_block_given = 1;
+        is_closed = false;
         root_block = current_block = block;
         if (should_init) {
             descendant->set_leaf(is_leaf ? 1 : 0);
@@ -139,11 +138,17 @@ public:
     }
 
     ~btree_handler() {
+        if (!is_closed)
+            close();
+    }
+
+    void close() {
         descendant->cleanup();
         if (cache_size > 0)
             delete cache;
         else if (!is_block_given)
             free(root_block);
+        is_closed = true;
     }
 
     void init_current_block() {
@@ -164,6 +169,17 @@ public:
 
     uint8_t *get_current_block() {
         return current_block;
+    }
+
+    std::string get_string(std::string key, std::string not_found_value) {
+        bool ret = get(key.c_str(), key.length(), NULL, NULL);
+        if (ret) {
+            uint8_t *val = (uint8_t *) malloc(key_at_len);
+            int val_len;
+            descendant->copy_value(val, &val_len);
+            return std::string((const char *) val, val_len);
+        }
+        return not_found_value;
     }
 
     bool get(const char *key, int key_len, int *in_size_out_val_len = NULL,
@@ -208,6 +224,9 @@ public:
         return descendant->search_current_block(ctx);
     }
 
+    bool put_string(std::string key, std::string value) {
+        return put(key.c_str(), key.length(), value.c_str(), value.length());
+    }
     bool put(const char *key, int key_len, const char *value,
             int value_len, bptree_iter_ctx *ctx = NULL) {
         return put((const uint8_t *) key, key_len, (const uint8_t *) value, value_len, ctx);

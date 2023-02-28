@@ -4,10 +4,10 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <string>
+#include <vector>
 #endif
 #include "btree_handler.h"
-
-using namespace std;
 
 // TODO: decide whether needed
 #define page_resv_bytes 5
@@ -452,7 +452,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
 
         // Writes data into buffer to form first page of Sqlite db
         int write_page0(int total_col_count, int pk_col_count,
-            const char *col_names[] = NULL, const char *table_name = NULL) {
+            std::vector<std::string> col_names, const char *table_name = NULL) {
 
             if (block_size % 512 || block_size < 512 || block_size > 65536)
                 throw SQLT_RES_INV_PAGE_SZ;
@@ -512,11 +512,11 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 int table_name_len = strlen(table_name);
                 size_t script_len = 13 + table_name_len + 2 + 13 + 15;
                 for (int i = 0; i < total_col_count; i++)
-                    script_len += strlen(col_names[i]);
+                    script_len += col_names[i].length();
                 script_len += total_col_count; // commas
                 script_len += total_col_count; // spaces
                 for (int i = 0; i < pk_col_count; i++)
-                    script_len += strlen(col_names[i]);
+                    script_len += col_names[i].length();
                 script_len += pk_col_count; // commas
                 // 100 byte header, 2 byte ptr, 3 byte rec/hdr vlen, 1 byte rowid
                 // 6 byte hdr len, 5 byte "table", twice table name, 4 byte uint32 root
@@ -532,8 +532,8 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 *script_pos++ = ' ';
                 *script_pos++ = '(';
                 for (int i = 0; i < total_col_count; i++) {
-                    size_t str_len = strlen(col_names[i]);
-                    memcpy(script_pos, col_names[i], str_len);
+                    size_t str_len = col_names[i].length();
+                    memcpy(script_pos, col_names[i].c_str(), str_len);
                     script_pos += str_len;
                     *script_pos++ = ',';
                     *script_pos++ = ' ';
@@ -541,8 +541,8 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 memcpy(script_pos, "PRIMARY KEY (", 13);
                 script_pos += 13;
                 for (int i = 0; i < pk_col_count; ) {
-                    size_t str_len = strlen(col_names[i]);
-                    memcpy(script_pos, col_names[i], str_len);
+                    size_t str_len = col_names[i].length();
+                    memcpy(script_pos, col_names[i].c_str(), str_len);
                     script_pos += str_len;
                     i++;
                     *script_pos++ = (i == pk_col_count ? ')' : ',');
@@ -677,15 +677,19 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
         unsigned long child_addr;
         int pk_count;
         int column_count;
-        const char **column_names;
+        std::vector<std::string> column_names;
         const char *table_name;
         int blk_hdr_len;
         sqlite_index_blaster(int total_col_count, int pk_col_count, 
-                const char *col_names[] = NULL, const char *tbl_name = NULL,
+                std::vector<std::string> col_names, const char *tbl_name = NULL,
                 int block_sz = DEFAULT_BLOCK_SIZE, int cache_sz = 0,
                 const char *fname = NULL) : column_count (total_col_count), pk_count (pk_col_count),
                     column_names (col_names), table_name (tbl_name),
                     btree_handler<sqlite_index_blaster>(block_sz, cache_sz, fname, 1, true) {
+            init();
+        }
+
+        void init() {
             U = block_size - page_resv_bytes;
             X = ((U-12)*64/255)-23;
             M = ((U-12)*32/255)-23;
@@ -785,7 +789,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
         }
 
         void cleanup() {
-            if (cache_size > 0) {
+            if (cache_size > 0 && master_block != NULL) {
                 uint32_t file_size_in_pages = cache->file_page_count;
                 write_uint32(master_block + 28, file_size_in_pages);
                 cache->write_page(master_block, 0, block_size);
@@ -1013,7 +1017,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 int hdr_len = read_vint32(key_at, &vlen);
                 uint8_t *raw_key_at = key_at + hdr_len;
                 if (memcmp(raw_key_at, key, key_len) != 0)
-                    cout << "Key not matching for update: " << key << ", len: " << key_len << endl;
+                    std::cout << "Key not matching for update: " << key << ", len: " << key_len << std::endl;
                 raw_key_at += key_len;
                 if (hdr_len + key_len + value_len == key_at_len && key_at_len <= X)
                     memcpy(raw_key_at, value, value_len);
@@ -1448,5 +1452,19 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
         }
 
 };
+
+#undef page_resv_bytes
+#undef BPT_LEAF0_LVL
+#undef BPT_STAGING_LVL
+#undef BPT_PARENT0_LVL
+
+#undef BPT_BLK_TYPE_INTERIOR
+#undef BPT_BLK_TYPE_LEAF
+#undef BPT_BLK_TYPE_OVFL
+
+#undef DEFAULT_BLOCK_SIZE
+
+#undef descendant
+#undef MAX_LVL_COUNT
 
 #endif

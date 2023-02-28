@@ -1,8 +1,10 @@
 *.db
 !sample_data/*.db
 test_sqlite_blaster
-test_sqlite_blaster.dSYM
+*.dSYM
 *.txt
 !sample_data/*.txt
 test.cpp
 a.out
+test
+

@@ -72,6 +72,32 @@ bool validate_page_size(int32_t page_size) {
   return false;
 }
 
+vector<string> read_csv_vector(char *csv, int col_count, bool is_name) {
+  vector<string> out;
+  uint8_t *p = (uint8_t *) csv;
+  char name[100];
+  int col_idx = 0;
+  int col_len = 0;
+  while (*p != '\0') {
+    if (is_name && (*p == ' ' || *p == '-' || (col_len == 0 && *p >= '0' && *p <= '9'))) {
+      p++;
+      continue;
+    }
+    if ((*p >= ' ' && *p <= '~' && *p != ',') || *p > 127)
+      name[col_len++] = *p;
+    if (*p == ',') {
+      if ((col_idx + 1) == col_count)
+        break;
+      out.push_back(string(name, col_len));
+      col_idx++;
+      col_len = 0;
+    }
+    p++;
+  }
+  out.push_back(string(name, col_len));
+  return out;
+}
+
 void read_csv(char *out[], char *csv, int col_count, bool is_name) {
   uint8_t *p = (uint8_t *) csv;
   char name[100];
@@ -113,13 +139,10 @@ int create_db(int argc, char *argv[]) {
   int col_count = atoi(argv[5]);
   int pk_col_count = atoi(argv[6]);
   unlink(argv[2]);
-  char *col_names[col_count];
-  const char **const_col_names = (const char **) col_names;
   cout << "Creating db " << argv[2] << ", table " << argv[4] << ", page size: " << page_size << endl;
   cout << "Col count: " << col_count << ", pk count: " << pk_col_count << ", Cols: " << argv[7] << endl;
-  read_csv(col_names, argv[7], col_count, true);
-  sqlite_index_blaster sqib(col_count, pk_col_count, const_col_names, argv[4], page_size, 400, argv[2]);
-  release_parsed_csv(col_names, col_count);
+  vector<string> col_names = read_csv_vector(argv[7], col_count, true);
+  sqlite_index_blaster sqib(col_count, pk_col_count, col_names, argv[4], page_size, 400, argv[2]);
   return SQLT_RES_OK;
 }
 
@@ -128,7 +151,7 @@ bool file_exists(const char *filename) {
   return (stat(filename, &buffer) == 0);
 }
 
-const char *empty_cols[] = {""};
+vector<string> empty_cols = {""};
 
 int insert_db(int argc, char *argv[]) {
   if (!file_exists(argv[2]))
@@ -320,7 +343,7 @@ void check_value(const char *key, int key_len, const char *val, int val_len,
       }
 }
 
-const char *census_col_names[] = {"cum_prop100k", "rank", "name", "year", "count", "prop100k", "pctwhite", "pctblack", "pctapi", "pctaian", "pct2prace", "pcthispanic"};
+vector<string> census_col_names = {"cum_prop100k", "rank", "name", "year", "count", "prop100k", "pctwhite", "pctblack", "pctapi", "pctaian", "pct2prace", "pcthispanic"};
 const void *census_col_values[12];
 const uint8_t census_col_types[] = {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
                                SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
@@ -448,7 +471,7 @@ bool test_census() {
   return true;
 }
 
-const char *baby_col_names[] = {"year", "state", "name", "total_babies", "primary_sex", "primary_sex_ratio", "per_100k_in_state"};
+vector<string> baby_col_names = {"year", "state", "name", "total_babies", "primary_sex", "primary_sex_ratio", "per_100k_in_state"};
 const uint8_t baby_col_types[] = {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
 const void *baby_col_values[7];
 
@@ -550,7 +573,7 @@ bool test_babynames() {
   return true;
 }
 
-const char *const_kv[] = {"key", "value"};
+vector<string> const_kv = {"key", "value"};
 
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
   unlink(filename);
