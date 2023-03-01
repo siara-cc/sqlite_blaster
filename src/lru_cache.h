@@ -49,7 +49,7 @@ protected:
     size_t disk_to_cache_map_size;
     dbl_lnklst *llarr;
     std::set<int> new_pages;
-    char filename[100];
+    std::string filename;
 #if USE_FOPEN == 1
     FILE *fp;
 #else
@@ -197,7 +197,7 @@ public:
     lru_cache(int pg_size, int cache_size_kb, const char *fname,
             bool (*is_changed)(uint8_t *, int), void (*set_changed)(uint8_t *, int, bool),
             int init_page_count = 0, void *(*alloc_fn)(size_t) = NULL)
-                : is_changed_fn (is_changed), set_changed_fn (set_changed) {
+                : filename (fname), is_changed_fn (is_changed), set_changed_fn (set_changed) {
         if (alloc_fn == NULL)
             alloc_fn = malloc;
         malloc_fn = alloc_fn;
@@ -205,7 +205,6 @@ public:
         cache_size_in_pages = cache_size_kb * 1024 / page_size;
         cache_occupied_size = 0;
         lnklst_first_entry = lnklst_last_entry = NULL;
-        strcpy(filename, fname);
         page_cache = (uint8_t *) alloc_fn(pg_size * cache_size_in_pages);
         root_block = (uint8_t *) alloc_fn(pg_size);
         llarr = (dbl_lnklst *) alloc_fn(cache_size_in_pages * sizeof(dbl_lnklst));

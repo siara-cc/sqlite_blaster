@@ -148,110 +148,6 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             return *ptr;
         }
 
-        // Reads and returns big-endian uint16_t
-        // at a given memory location
-        uint16_t read_uint16(const uint8_t *ptr) {
-            return (*ptr << 8) + ptr[1];
-        }
-
-        // Reads and returns big-endian int24_t
-        // at a given memory location
-        int32_t read_int24(const uint8_t *ptr) {
-            uint32_t ret;
-            ret = ((uint32_t)(*ptr & 0x80)) << 24;
-            ret |= ((uint32_t)(*ptr++ & 0x7F)) << 16;
-            ret |= ((uint32_t)*ptr++) << 8;
-            ret += *ptr;
-            return ret;
-        }
-
-        // Reads and returns big-endian uint24_t
-        // at a given memory location
-        uint32_t read_uint24(const uint8_t *ptr) {
-            uint32_t ret;
-            ret = ((uint32_t)*ptr++) << 16;
-            ret += ((uint32_t)*ptr++) << 8;
-            ret += *ptr;
-            return ret;
-        }
-
-        // Reads and returns big-endian uint32_t
-        // at a given memory location
-        uint32_t read_uint32(const uint8_t *ptr) {
-            uint32_t ret;
-            ret = ((uint32_t)*ptr++) << 24;
-            ret += ((uint32_t)*ptr++) << 16;
-            ret += ((uint32_t)*ptr++) << 8;
-            ret += *ptr;
-            return ret;
-        }
-
-        // Reads and returns big-endian int48_t
-        // at a given memory location
-        int64_t read_int48(const uint8_t *ptr) {
-            uint64_t ret;
-            ret = ((uint64_t)(*ptr & 0x80)) << 56;
-            ret |= ((uint64_t)(*ptr++ & 0x7F)) << 48;
-            ret |= ((uint64_t)*ptr++) << 32;
-            ret |= ((uint64_t)*ptr++) << 24;
-            ret |= ((uint64_t)*ptr++) << 16;
-            ret |= ((uint64_t)*ptr++) << 8;
-            ret += *ptr;
-            return ret;
-        }
-
-        // Reads and returns big-endian uint48_t :)
-        // at a given memory location
-        uint64_t read_uint48(const uint8_t *ptr) {
-            uint64_t ret = 0;
-            int len = 6;
-            while (len--)
-                ret += (*ptr++ << (8 * len));
-            return ret;
-        }
-
-        // Reads and returns big-endian uint64_t
-        // at a given memory location
-        uint64_t read_uint64(const uint8_t *ptr) {
-            uint64_t ret = 0;
-            int len = 8;
-            while (len--)
-                ret += (*ptr++ << (8 * len));
-            return ret;
-        }
-
-        // Reads and returns variable integer
-        // from given location as uint16_t
-        // Also returns the length of the varint
-        uint16_t read_vint16(const uint8_t *ptr, int8_t *vlen) {
-            uint16_t ret = 0;
-            int8_t len = 3; // read max 3 bytes
-            do {
-                ret <<= 7;
-                ret += *ptr & 0x7F;
-                len--;
-            } while ((*ptr++ & 0x80) == 0x80 && len);
-            if (vlen)
-                *vlen = 3 - len;
-            return ret;
-        }
-
-        // Reads and returns variable integer
-        // from given location as uint32_t
-        // Also returns the length of the varint
-        uint32_t read_vint32(const uint8_t *ptr, int8_t *vlen) {
-            uint32_t ret = 0;
-            int8_t len = 5; // read max 5 bytes
-            do {
-                ret <<= 7;
-                ret += *ptr & 0x7F;
-                len--;
-            } while ((*ptr++ & 0x80) == 0x80 && len);
-            if (vlen)
-                *vlen = 5 - len;
-            return ret;
-        }
-
         // Returns type of column based on given value and length
         // See https://www.sqlite.org/fileformat.html#record_format
         uint32_t derive_col_type_or_len(int type, const void *val, int len) {
@@ -315,28 +211,6 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             } else
                 memcpy(data_ptr, val, len);
             return len;
-        }
-
-        // See .h file for API description
-        uint32_t derive_data_len(uint32_t col_type_or_len) {
-            if (col_type_or_len >= 12) {
-                if (col_type_or_len % 2)
-                    return (col_type_or_len - 13)/2;
-                return (col_type_or_len - 12)/2; 
-            } else if (col_type_or_len < 10)
-                return col_data_lens[col_type_or_len];
-            return 0;
-        }
-
-        // See .h file for API description
-        uint32_t derive_col_type(uint32_t col_type_or_len) {
-            if (col_type_or_len >= 12) {
-                if (col_type_or_len % 2)
-                    return SQLT_TYPE_TEXT;
-                return SQLT_TYPE_BLOB;
-            } else if (col_type_or_len < 10)
-                return col_type_or_len;
-            return 0;
         }
 
         // Initializes the buffer as a B-Tree Leaf Index
@@ -580,10 +454,6 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 | ((int64_t)(bytes & 0x7FFFFF) << (52-23) );
         }
 
-        double read_double(const uint8_t *ptr) {
-            return (double) *ptr; // TODO: assuming little endian?
-        }
-
         int64_t cvt_to_int64(const uint8_t *ptr, int type) {
             switch (type) {
                 case SQLT_TYPE_NULL:
@@ -725,6 +595,136 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
         int make_new_rec(uint8_t *ptr, int col_count, const void *values[], 
                 const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
             return write_new_rec(-1, 0, col_count, values, value_lens, types, ptr);
+        }
+
+        // Reads and returns big-endian uint16_t
+        // at a given memory location
+        uint16_t read_uint16(const uint8_t *ptr) {
+            return (*ptr << 8) + ptr[1];
+        }
+
+        // Reads and returns big-endian int24_t
+        // at a given memory location
+        int32_t read_int24(const uint8_t *ptr) {
+            uint32_t ret;
+            ret = ((uint32_t)(*ptr & 0x80)) << 24;
+            ret |= ((uint32_t)(*ptr++ & 0x7F)) << 16;
+            ret |= ((uint32_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
+        // Reads and returns big-endian uint24_t
+        // at a given memory location
+        uint32_t read_uint24(const uint8_t *ptr) {
+            uint32_t ret;
+            ret = ((uint32_t)*ptr++) << 16;
+            ret += ((uint32_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
+        // Reads and returns big-endian uint32_t
+        // at a given memory location
+        uint32_t read_uint32(const uint8_t *ptr) {
+            uint32_t ret;
+            ret = ((uint32_t)*ptr++) << 24;
+            ret += ((uint32_t)*ptr++) << 16;
+            ret += ((uint32_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
+        // Reads and returns big-endian int48_t
+        // at a given memory location
+        int64_t read_int48(const uint8_t *ptr) {
+            uint64_t ret;
+            ret = ((uint64_t)(*ptr & 0x80)) << 56;
+            ret |= ((uint64_t)(*ptr++ & 0x7F)) << 48;
+            ret |= ((uint64_t)*ptr++) << 32;
+            ret |= ((uint64_t)*ptr++) << 24;
+            ret |= ((uint64_t)*ptr++) << 16;
+            ret |= ((uint64_t)*ptr++) << 8;
+            ret += *ptr;
+            return ret;
+        }
+
+        // Reads and returns big-endian uint48_t :)
+        // at a given memory location
+        uint64_t read_uint48(const uint8_t *ptr) {
+            uint64_t ret = 0;
+            int len = 6;
+            while (len--)
+                ret += (*ptr++ << (8 * len));
+            return ret;
+        }
+
+        // Reads and returns big-endian uint64_t
+        // at a given memory location
+        uint64_t read_uint64(const uint8_t *ptr) {
+            uint64_t ret = 0;
+            int len = 8;
+            while (len--)
+                ret += (*ptr++ << (8 * len));
+            return ret;
+        }
+
+        // Reads and returns variable integer
+        // from given location as uint16_t
+        // Also returns the length of the varint
+        uint16_t read_vint16(const uint8_t *ptr, int8_t *vlen) {
+            uint16_t ret = 0;
+            int8_t len = 3; // read max 3 bytes
+            do {
+                ret <<= 7;
+                ret += *ptr & 0x7F;
+                len--;
+            } while ((*ptr++ & 0x80) == 0x80 && len);
+            if (vlen)
+                *vlen = 3 - len;
+            return ret;
+        }
+
+        // Reads and returns variable integer
+        // from given location as uint32_t
+        // Also returns the length of the varint
+        uint32_t read_vint32(const uint8_t *ptr, int8_t *vlen) {
+            uint32_t ret = 0;
+            int8_t len = 5; // read max 5 bytes
+            do {
+                ret <<= 7;
+                ret += *ptr & 0x7F;
+                len--;
+            } while ((*ptr++ & 0x80) == 0x80 && len);
+            if (vlen)
+                *vlen = 5 - len;
+            return ret;
+        }
+
+        double read_double(const uint8_t *ptr) {
+            return (double) *ptr; // TODO: assuming little endian?
+        }
+
+        // See .h file for API description
+        uint32_t derive_data_len(uint32_t col_type_or_len) {
+            if (col_type_or_len >= 12) {
+                if (col_type_or_len % 2)
+                    return (col_type_or_len - 13)/2;
+                return (col_type_or_len - 12)/2; 
+            } else if (col_type_or_len < 10)
+                return col_data_lens[col_type_or_len];
+            return 0;
+        }
+
+        // See .h file for API description
+        uint32_t derive_col_type(uint32_t col_type_or_len) {
+            if (col_type_or_len >= 12) {
+                if (col_type_or_len % 2)
+                    return SQLT_TYPE_TEXT;
+                return SQLT_TYPE_BLOB;
+            } else if (col_type_or_len < 10)
+                return col_type_or_len;
+            return 0;
         }
 
         uint8_t *locate_col(int which_col, uint8_t *rec, int& col_type_or_len, int& col_len, int& col_type) {

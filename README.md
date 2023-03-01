@@ -215,6 +215,7 @@ Valentine's Day,Comedy,Warner Bros.
 - Deletes are not implemented yet.  This library is intended primarily for fast inserts.
 - Support for concurrent inserts not implemented yet.
 - The regular ROWID table of Sqlite is not implemented.
+- Only the equivalent of memcmp is used to index records.  The order in which keys are ordered may not match with official Sqlite lib for non-ASCII char sets.
 - Key lengths are limited depending on page size as shown in the table below.  This is just because the source code does not implement support for longer keys. However, this is considered sufficient for most practical purposes.
 
   | **Page Size** | **Max Key Length** |

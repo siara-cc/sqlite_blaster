@@ -197,6 +197,8 @@ public:
         int search_result = traverse_to_leaf(ctx);
         if (search_result < 0)
             return false;
+        if (in_size_out_val_len != NULL)
+            *in_size_out_val_len = key_at_len;
         if (val != NULL)
             descendant->copy_value(val, in_size_out_val_len);
         return true;
