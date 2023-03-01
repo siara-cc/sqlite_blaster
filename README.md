@@ -92,7 +92,7 @@ int main() {
     std::vector<std::string> col_names = {"key", "value"}; // -std >= c++11
     sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
     sqib.put_string("hello", "world");
-    cout << "Value of hello is " << sqib.get_string("hello", "not_found") << endl;
+    std::cout << "Value of hello is " << sqib.get_string("hello", "not_found") << std::endl;
     return 0;
 }
 ```
