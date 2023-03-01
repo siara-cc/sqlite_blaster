@@ -701,8 +701,21 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             return ret;
         }
 
-        double read_double(const uint8_t *ptr) {
-            return (double) *ptr; // TODO: assuming little endian?
+        double read_double(const uint8_t *data) {
+            uint64_t value;
+            std::memcpy(&value, data, sizeof(uint64_t)); // read 8 bytes from data pointer
+            // SQLite stores 64-bit reals as big-endian integers
+            value = ((value & 0xff00000000000000ull) >> 56) | // byte 1 -> byte 8
+                    ((value & 0x00ff000000000000ull) >> 40) | // byte 2 -> byte 7
+                    ((value & 0x0000ff0000000000ull) >> 24) | // byte 3 -> byte 6
+                    ((value & 0x000000ff00000000ull) >> 8)  | // byte 4 -> byte 5
+                    ((value & 0x00000000ff000000ull) << 8)  | // byte 5 -> byte 4
+                    ((value & 0x0000000000ff0000ull) << 24) | // byte 6 -> byte 3
+                    ((value & 0x000000000000ff00ull) << 40) | // byte 7 -> byte 2
+                    ((value & 0x00000000000000ffull) << 56);  // byte 8 -> byte 1
+            double result;
+            std::memcpy(&result, &value, sizeof(double)); // convert the integer to a double
+            return result;
         }
 
         // See .h file for API description
