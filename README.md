@@ -53,11 +53,10 @@ In this mode, a table is created with just 2 columns, `key` and `value` as shown
 ```c++
 #include "sqlite_index_blaster.h"
 #include <string>
-#include <vector>
 
 int main() {
 
-    std::vector<std::string> col_names = {"key", "value"}; // -std >= c++11
+    std::string col_names = "key, value"; // -std >= c++11
     sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
     sqib.put_string("hello", "world");
     return 0;
@@ -87,10 +86,9 @@ To retrieve the inserted values, use `get` method as shown below
 ```c++
 #include "sqlite_index_blaster.h"
 #include <string>
-#include <vector>
 
 int main() {
-    std::vector<std::string> col_names = {"key", "value"}; // -std >= c++11
+    std::string col_names = "key, value"; // -std >= c++11
     sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
     sqib.put_string("hello", "world");
     std::cout << "Value of hello is " << sqib.get_string("hello", "not_found") << std::endl;
@@ -105,13 +103,12 @@ In this mode, a table is created with just 2 columns, `key` and `doc` as shown b
 ```c++
 #include "sqlite_index_blaster.h"
 #include <string>
-#include <vector>
 
 const char * json1 = "{\"name\": \"Alice\", \"age\": 25, \"email\": \"alice@example.com\"}";
 const char * json2 = "{\"name\": \"George\", \"age\": 32, \"email\": \"george@example.com\"}";
 
 int main() {
-    std::vector<std::string> col_names = {"key", "doc"}; // -std >= c++11
+    std::string col_names = "key, doc"; // -std >= c++11
     sqlite_index_blaster sqib(2, 1, col_names, "doc_index", 4096, 40, "doc_store.db");
     sqib.put_string("primary_contact", json1);
     sqib.put_string("secondary_contact", json2);
@@ -134,7 +131,6 @@ This repo can be used to create regular tables with primary key(s) as shown belo
 ```c++
 #include <cmath>
 #include <string>
-#include <vector>
 
 #include "sqlite_index_blaster.h"
 
@@ -142,7 +138,7 @@ const uint8_t col_types[] = {SQLT_TYPE_TEXT, SQLT_TYPE_INT8, SQLT_TYPE_INT8, SQL
 
 int main() {
 
-    std::vector<std::string> col_names = {"student_name", "age", "maths_marks", "physics_marks", "chemistry_marks", "average_marks"};
+    std::string col_names = "student_name, age, maths_marks, physics_marks, chemistry_marks, average_marks";
     sqlite_index_blaster sqib(6, 2, col_names, "student_marks", 4096, 40, "student_marks.db");
 
     int8_t maths, physics, chemistry, age;
