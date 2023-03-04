@@ -1,5 +1,5 @@
-#ifndef BP_TREE_H
-#define BP_TREE_H
+#ifndef SIARA_BP_TREE_H
+#define SIARA_BP_TREE_H
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -14,40 +14,19 @@
 #define BPT_BLK_TYPE_LEAF 128
 #define BPT_BLK_TYPE_OVFL 255
 
-#define DEFAULT_BLOCK_SIZE 4096
+#define BPT_DEFAULT_BLOCK_SIZE 4096
 
 #define descendant static_cast<T*>(this)
-
-class util {
-  public:
-    static int compare(const uint8_t *v1, int len1, const uint8_t *v2,
-            int len2, int k = 0) {
-        int lim = (len2 < len1 ? len2 : len1);
-        while (k < lim) {
-            uint8_t c1 = v1[k];
-            uint8_t c2 = v2[k];
-            k++;
-            if (c1 < c2)
-                return -k;
-            else if (c1 > c2)
-                return k;
-        }
-        if (len1 == len2)
-            return 0;
-        k++;
-        return (len1 < len2 ? -k : k);
-    }
-};
 
 union page_ptr {
     unsigned long page;
     uint8_t *ptr;
 };
 
-#define MAX_LVL_COUNT 10
+#define BPT_MAX_LVL_COUNT 10
 class bptree_iter_ctx {
     public:
-        page_ptr pages[MAX_LVL_COUNT];
+        page_ptr pages[BPT_MAX_LVL_COUNT];
         int found_page_pos;
         int8_t last_page_lvl;
         int8_t found_page_idx;
@@ -97,7 +76,7 @@ public:
     size_t block_size;
     int cache_size;
     const char *filename;
-    btree_handler(uint32_t block_sz = DEFAULT_BLOCK_SIZE, int cache_sz_kb = 0,
+    btree_handler(uint32_t block_sz = BPT_DEFAULT_BLOCK_SIZE, int cache_sz_kb = 0,
             const char *fname = NULL, int start_page_num = 0, bool whether_btree = false) :
             block_size (block_sz), cache_size (cache_sz_kb), filename (fname) {
         descendant->init_derived();
