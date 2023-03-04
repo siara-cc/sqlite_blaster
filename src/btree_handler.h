@@ -150,7 +150,7 @@ public:
         return current_block;
     }
 
-    std::string get_string(std::string key, std::string not_found_value) {
+    std::string get_string(std::string& key, std::string& not_found_value) {
         bool ret = get(key.c_str(), key.length(), NULL, NULL);
         if (ret) {
             uint8_t *val = (uint8_t *) malloc(key_at_len);
@@ -205,7 +205,7 @@ public:
         return descendant->search_current_block(ctx);
     }
 
-    bool put_string(std::string key, std::string value) {
+    bool put_string(std::string& key, std::string& value) {
         return put(key.c_str(), key.length(), value.c_str(), value.length());
     }
     bool put(const char *key, int key_len, const char *value,

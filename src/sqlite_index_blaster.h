@@ -210,7 +210,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
 
         // Writes data into buffer to form first page of Sqlite db
         int write_page0(int total_col_count, int pk_col_count,
-            std::string col_names, std::string table_name = {}) {
+            const std::string& col_names, const std::string& table_name = {}) {
 
             if (block_size % 512 || block_size < 512 || block_size > 65536)
                 throw SQLT_RES_INV_PAGE_SZ;
@@ -256,9 +256,9 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             init_bt_tbl_leaf(current_block + 100);
 
             // write table script record
-            std::string default_table_name = "idx1";
-            if (table_name.empty())
-                table_name = default_table_name;
+            std::string tbl_name = "idx1";
+            if (!table_name.empty())
+                tbl_name = table_name;
             // write table script record
             int col_count = 5;
             // if (table_script) {
@@ -267,7 +267,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             //         return SQLT_RES_TOO_LONG;
             //     set_col_val(4, SQLT_TYPE_TEXT, table_script, script_len);
             // } else {
-                int table_name_len = table_name.length();
+                int table_name_len = tbl_name.length();
                 // len("CREATE TABLE ") + table_name_len + len(" (")
                 //    + len("PRIMARY KEY (") + len(") WITHOUT ROWID")
                 size_t script_len = 13 + table_name_len + 2 + 13 + 15;
@@ -289,13 +289,13 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 // 100 byte header, 2 byte ptr, 3 byte rec/hdr vlen, 1 byte rowid
                 // 6 byte hdr len, 5 byte "table", twice table name, 4 byte uint32 root
                 if (script_len > (block_size - 100 - page_resv_bytes - blk_hdr_len
-                        - 2 - 3 - 1 - 6 - 5 - table_name.length() * 2 - 4))
+                        - 2 - 3 - 1 - 6 - 5 - tbl_name.length() * 2 - 4))
                     return SQLT_RES_TOO_LONG;
                 uint8_t *script_loc = current_block + block_size - page_resv_bytes - script_len;
                 uint8_t *script_pos = script_loc;
                 memcpy(script_pos, "CREATE TABLE ", 13);
                 script_pos += 13;
-                memcpy(script_pos, table_name.c_str(), table_name_len);
+                memcpy(script_pos, tbl_name.c_str(), table_name_len);
                 script_pos += table_name_len;
                 *script_pos++ = ' ';
                 *script_pos++ = '(';
@@ -312,7 +312,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 script_pos += 15;
             // }
             int32_t root_page_no = 2;
-            const void *master_rec_values[] = {"table", table_name.c_str(), table_name.c_str(), &root_page_no, script_loc};
+            const void *master_rec_values[] = {"table", tbl_name.c_str(), tbl_name.c_str(), &root_page_no, script_loc};
             const size_t master_rec_col_lens[] = {5, table_name.length(), table_name.length(), sizeof(root_page_no), script_len};
             const uint8_t master_rec_col_types[] = {SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT};
             int res = write_new_rec(0, 1, 5, master_rec_values, master_rec_col_lens, master_rec_col_types);
@@ -507,11 +507,11 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
         unsigned long child_addr;
         int pk_count;
         int column_count;
-        std::string column_names;
-        std::string table_name;
+        const std::string column_names;
+        const std::string table_name;
         int blk_hdr_len;
         sqlite_index_blaster(int total_col_count, int pk_col_count, 
-                std::string col_names, std::string tbl_name = NULL,
+                const std::string& col_names, const std::string& tbl_name = {},
                 int block_sz = BPT_DEFAULT_BLOCK_SIZE, int cache_sz = 0,
                 const char *fname = NULL) : column_count (total_col_count), pk_count (pk_col_count),
                     column_names (col_names), table_name (tbl_name),

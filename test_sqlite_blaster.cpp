@@ -315,8 +315,7 @@ void check_value(const char *key, int key_len, const char *val, int val_len,
       }
 }
 
-string census_col_names = "cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi, pctaian, pct2prace, pcthispanic";
-const void *census_col_values[12];
+const string census_col_names = "cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi, pctaian, pct2prace, pcthispanic";
 const uint8_t census_col_types[] = {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
                                SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
 
@@ -391,6 +390,7 @@ bool test_census(int page_size, int cache_size, const char *filename) {
           pcthispanic = 0;
         //cout << endl;
         uint8_t rec[line.length() + 500];
+        const void *census_col_values[12];
         census_col_values[0] = &cum_prop100k;
         census_col_values[1] = &rank;
         census_col_values[2] = (const void *) name.c_str();
@@ -443,9 +443,8 @@ bool test_census() {
   return true;
 }
 
-string baby_col_names = "year, state, name, total_babies, primary_sex, primary_sex_ratio, per_100k_in_state";
+const string baby_col_names = "year, state, name, total_babies, primary_sex, primary_sex_ratio, per_100k_in_state";
 const uint8_t baby_col_types[] = {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
-const void *baby_col_values[7];
 
 bool test_babynames(int page_size, int cache_size, const char *filename) {
 
@@ -499,6 +498,7 @@ bool test_babynames(int page_size, int cache_size, const char *filename) {
             per_100k_in_state = 0;
         //cout << endl;
         uint8_t rec[line.length() + 100];
+        const void *baby_col_values[7];
         baby_col_values[0] = &year;
         baby_col_values[1] = (const void *) state.c_str();
         baby_col_values[2] = (const void *) name.c_str();
@@ -545,7 +545,7 @@ bool test_babynames() {
   return true;
 }
 
-string const_kv = "key, value";
+const string const_kv = "key, value";
 
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
   unlink(filename);
