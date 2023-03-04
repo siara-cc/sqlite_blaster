@@ -1,5 +1,6 @@
 # Sqlite Index Blaster
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/6ab783c325cb4e199a01ff6280a38bd8)](https://app.codacy.com/gh/siara-cc/sqlite_blaster?utm_source=github.com&utm_medium=referral&utm_content=siara-cc/sqlite_blaster&utm_campaign=Badge_Grade_Settings)
 [![C/C++ CI](https://github.com/siara-cc/sqlite_blaster/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/siara-cc/sqlite_blaster/actions/workflows/c-cpp.yml)
 
 This library provides API for creating huge Sqlite indexes at breakneck speeds for millions of records much faster than the official SQLite library by leaving out crash recovery.
