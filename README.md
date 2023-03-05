@@ -146,16 +146,22 @@ int main() {
     uint8_t rec_buf[500];
     int rec_len;
 
-    age = 19; maths = 80; physics = 69; chemistry = 98; average = round((maths + physics + chemistry) * 100 / 3) / 100;
-    rec_len = sqib.make_new_rec(rec_buf, 6, (const void *[]) {"Robert", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
+    age = 19; maths = 80; physics = 69; chemistry = 98;
+    average = round((maths + physics + chemistry) * 100 / 3) / 100;
+    const void *rec_values[] = {"Robert", &age, &maths, &physics, &chemistry, &average};
+    rec_len = sqib.make_new_rec(rec_buf, 6, rec_values, NULL, col_types);
     sqib.put(rec_buf, -rec_len, NULL, 0);
 
-    age = 20; maths = 82; physics = 99; chemistry = 83; average = round((maths + physics + chemistry) * 100 / 3) / 100;
-    rec_len = sqib.make_new_rec(rec_buf, 6, (const void *[]) {"Barry", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
+    age = 20; maths = 82; physics = 99; chemistry = 83;
+    average = round((maths + physics + chemistry) * 100 / 3) / 100;
+    rec_values[0] = "Barry";
+    rec_len = sqib.make_new_rec(rec_buf, 6, rec_values, NULL, col_types);
     sqib.put(rec_buf, -rec_len, NULL, 0);
 
-    age = 23; maths = 84; physics = 89; chemistry = 74; average = round((maths + physics + chemistry) * 100 / 3) / 100;
-    rec_len = sqib.make_new_rec(rec_buf, 6, (const void *[]) {"Elizabeth", &age, &maths, &physics, &chemistry, &average}, NULL, col_types);
+    age = 23; maths = 84; physics = 89; chemistry = 74;
+    average = round((maths + physics + chemistry) * 100 / 3) / 100;
+    rec_values[0] = "Elizabeth";
+    rec_len = sqib.make_new_rec(rec_buf, 6, rec_values, NULL, col_types);
     sqib.put(rec_buf, -rec_len, NULL, 0);
 
     return 0;

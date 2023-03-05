@@ -73,8 +73,7 @@ bool validate_page_size(int32_t page_size) {
   return false;
 }
 
-void read_csv(char *out[], char *csv, int col_count, bool is_name) {
-  uint8_t *p = (uint8_t *) csv;
+void read_csv(char *out[], char *p, int col_count, bool is_name) {
   char name[100];
   int col_idx = 0;
   int col_len = 0;
@@ -83,7 +82,7 @@ void read_csv(char *out[], char *csv, int col_count, bool is_name) {
       p++;
       continue;
     }
-    if ((*p >= ' ' && *p <= '~' && *p != ',') || *p > 127)
+    if ((*p >= ' ' && *p <= '~' && *p != ',') || *p < 0)
       name[col_len++] = *p;
     if (*p == ',') {
       if ((col_idx + 1) == col_count)
@@ -304,15 +303,24 @@ int64_t prepare_data(uint8_t **data_buf_ptr, int64_t data_sz, int KEY_LEN, int V
     return ret;
 }
 
-void check_value(const char *key, int key_len, const char *val, int val_len,
-      const char *returned_value, int returned_len, int& cmp) {
-      int d = util::compare((const uint8_t *) val, val_len, (const uint8_t *) returned_value, returned_len);
+void check_value(const uint8_t key[], int key_len, const uint8_t val[], int val_len,
+      const uint8_t returned_value[], int returned_len, int& cmp) {
+      int d = util::compare(val, val_len, returned_value, returned_len);
       if (d != 0) {
         cmp++;
           //printf("cmp: %.*s==========%.*s--------->%.*s\n", key_len, key, val_len, val, returned_len, returned_value);
           //cout << cmp << ":" << (char *) key << "=========="
           //        << val << "----------->" << returned_value << endl;
       }
+}
+
+bool run_cmd(char cmd[]) {
+  int sysret = system(cmd);
+  if (sysret) {
+    cout << "FAILED: " << cmd << endl;
+    return false;
+  }
+  return true;
 }
 
 const string census_col_names = "cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi, pctaian, pct2prace, pcthispanic";
@@ -390,19 +398,8 @@ bool test_census(int page_size, int cache_size, const char *filename) {
           pcthispanic = 0;
         //cout << endl;
         uint8_t rec[line.length() + 500];
-        const void *census_col_values[12];
-        census_col_values[0] = &cum_prop100k;
-        census_col_values[1] = &rank;
-        census_col_values[2] = (const void *) name.c_str();
-        census_col_values[3] = &year;
-        census_col_values[4] = &count;
-        census_col_values[5] = &prop100k;
-        census_col_values[6] = &pctwhite;
-        census_col_values[7] = &pctblack;
-        census_col_values[8] = &pctapi;
-        census_col_values[9] = &pctaian;
-        census_col_values[10] = &pct2prace;
-        census_col_values[11] = &pcthispanic;
+        const void *census_col_values[] = {&cum_prop100k, &rank, name.c_str(), &year, &count,
+              &prop100k, &pctwhite, &pctblack, &pctapi, &pctaian, &pct2prace, &pcthispanic};
         int rec_len = sqib->make_new_rec(rec, 12, census_col_values, NULL, census_col_types);
         sqib->put(rec, -rec_len, NULL, 0);
       }
@@ -411,21 +408,14 @@ bool test_census(int page_size, int cache_size, const char *filename) {
   delete sqib;
   char cmd[500];
   sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
-  int sysret = system(cmd);
-  if (sysret) {
-    cout << "Integrity check failed" << endl;
-    return false;
+  if (run_cmd(cmd)) {
+      sprintf(cmd, "sqlite3 %s \"select cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi,"
+                    " pctaian, pct2prace, pcthispanic from surnames order by name, rank\" > census.txt", filename);
+      run_cmd(cmd);
+      strcpy(cmd, "cmp census.txt sample_data/census_cmp.txt");
+      return run_cmd(cmd);
   }
-  sprintf(cmd, "sqlite3 %s \"select cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi,"
-                 " pctaian, pct2prace, pcthispanic from surnames order by name, rank\" > census.txt", filename);
-  sysret = system(cmd);
-  strcpy(cmd, "cmp census.txt sample_data/census_cmp.txt");
-  sysret = system(cmd);
-  if (sysret) {
-    cout << filename << " compare failed" << endl;
-    return false;
-  }
-      
+
   return true;
 
 }
@@ -498,14 +488,8 @@ bool test_babynames(int page_size, int cache_size, const char *filename) {
             per_100k_in_state = 0;
         //cout << endl;
         uint8_t rec[line.length() + 100];
-        const void *baby_col_values[7];
-        baby_col_values[0] = &year;
-        baby_col_values[1] = (const void *) state.c_str();
-        baby_col_values[2] = (const void *) name.c_str();
-        baby_col_values[3] = &total_babies;
-        baby_col_values[4] = (const void *) primary_sex.c_str();
-        baby_col_values[5] = &primary_sex_ratio;
-        baby_col_values[6] = &per_100k_in_state;
+        const void *baby_col_values[7] = {&year, state.c_str(), name.c_str(),
+            &total_babies, primary_sex.c_str(), &primary_sex_ratio, &per_100k_in_state};
         int rec_len = sqib->make_new_rec(rec, 7, baby_col_values, NULL, baby_col_types);
         sqib->put(rec, -rec_len, NULL, 0);
       }
@@ -514,20 +498,13 @@ bool test_babynames(int page_size, int cache_size, const char *filename) {
   delete sqib;
   char cmd[100];
   sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
-  int sysret = system(cmd);
-  if (sysret) {
-    cout << "Integrity check failed" << endl;
-    return false;
+  if (run_cmd(cmd)) {
+      sprintf(cmd, "sqlite3 %s \"select * from gendered_names order by state,name\" > babynames.txt", filename);
+      run_cmd(cmd);
+      strcpy(cmd, "cmp babynames.txt sample_data/babynames_cmp.txt");
+      return run_cmd(cmd);
   }
-  sprintf(cmd, "sqlite3 %s \"select * from gendered_names order by state,name\" > babynames.txt", filename);
-  sysret = system(cmd);
-  strcpy(cmd, "cmp babynames.txt sample_data/babynames_cmp.txt");
-  sysret = system(cmd);
-  if (sysret) {
-    cout << filename << " compare failed" << endl;
-    return false;
-  }
-      
+
   return true;
 
 }
@@ -565,24 +542,24 @@ bool test_random_data(int page_size, long start_count, int cache_size, char *fil
       uint32_t key_len = read_vint32(data_buf + pos, &vlen);
       pos += vlen;
       uint32_t value_len = read_vint32(data_buf + pos + key_len + 1, &vlen);
-      sqib.put((char *) data_buf + pos, key_len, (char *) data_buf + pos + key_len + vlen + 1, value_len);
+      sqib.put(data_buf + pos, key_len, data_buf + pos + key_len + vlen + 1, value_len);
       pos += key_len + value_len + vlen + 1;
   }
   int cmp = 0;
   int ctr = 0;
   int null_ctr = 0;
-  char value_buf[VALUE_LEN + 1];
+  uint8_t value_buf[VALUE_LEN + 1];
   for (int64_t pos = 0; pos < data_sz; pos++) {
       int len = VALUE_LEN;
       int8_t vlen;
       uint32_t key_len = read_vint32(data_buf + pos, &vlen);
       pos += vlen;
       uint32_t value_len = read_vint32(data_buf + pos + key_len + 1, &vlen);
-      bool is_found = sqib.get((char *) data_buf + pos, key_len, &len, value_buf);
+      bool is_found = sqib.get(data_buf + pos, key_len, &len, value_buf);
       if (!is_found)
         null_ctr++;
-      check_value((char *) data_buf + pos, key_len,
-              (char *) data_buf + pos + key_len + vlen + 1, value_len, value_buf, len, cmp);
+      check_value(data_buf + pos, key_len,
+              data_buf + pos + key_len + vlen + 1, value_len, value_buf, len, cmp);
       pos += key_len + value_len + vlen + 1;
       ctr++;
   }
@@ -605,11 +582,7 @@ bool test_random_data(long start_count, int cache_size) {
       return false;
     char cmd[100];
     sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
-    int sysret = system(cmd);
-    if (sysret) {
-      cout << "Integrity check failed" << endl;
-      return false;
-    }
+    return run_cmd(cmd);
   }
   return true;
 }
