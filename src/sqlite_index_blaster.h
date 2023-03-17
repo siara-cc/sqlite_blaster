@@ -127,7 +127,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                             block_size, page_resv_bytes, column_names, table_name);
                     cache->write_page(master_block, 0, block_size);
                 } else {
-                    master_block = (uint8_t *) malloc(block_size);
+                    master_block = new uint8_t[block_size];
                     if (cache->read_page(master_block, 0, block_size) != block_size)
                         throw 1;
                 }
@@ -244,7 +244,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 cache->write_page(master_block, 0, block_size);
             }
             if (master_block != NULL)
-                free(master_block);
+                delete master_block;
         }
 
         inline void set_current_block_root() {
