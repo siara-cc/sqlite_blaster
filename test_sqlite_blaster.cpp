@@ -112,7 +112,7 @@ int create_db(int argc, char *argv[]) {
     return SQLT_RES_ERR;
   int col_count = atoi(argv[5]);
   int pk_col_count = atoi(argv[6]);
-  unlink(argv[2]);
+  remove(argv[2]);
   cout << "Creating db " << argv[2] << ", table " << argv[4] << ", page size: " << page_size << endl;
   cout << "Col count: " << col_count << ", pk count: " << pk_col_count << ", Cols: " << argv[7] << endl;
   sqlite_index_blaster sqib(col_count, pk_col_count, argv[7], argv[4], page_size, 400, argv[2]);
@@ -329,7 +329,7 @@ const uint8_t census_col_types[] = {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_T
 
 bool test_census(int page_size, int cache_size, const char *filename) {
 
-  unlink(filename);
+  remove(filename);
   sqlite_index_blaster *sqib = new sqlite_index_blaster(12, 3, census_col_names, "surnames", page_size, cache_size, filename);
   ifstream file("sample_data/census.txt");
   if (file.is_open()) {
@@ -438,7 +438,7 @@ const uint8_t baby_col_types[] = {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEX
 
 bool test_babynames(int page_size, int cache_size, const char *filename) {
 
-  unlink(filename);
+  remove(filename);
   sqlite_index_blaster *sqib = new sqlite_index_blaster(7, 3, baby_col_names,
                                   "gendered_names", page_size, cache_size, filename);
   ifstream file("sample_data/babynames.txt");
@@ -525,7 +525,7 @@ bool test_babynames() {
 const string const_kv = "key, value";
 
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
-  unlink(filename);
+  remove(filename);
   int U = page_size - 5;
   int M = ((U-12)*32/255)-23-10;
   int KEY_LEN = M;
