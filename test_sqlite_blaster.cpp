@@ -37,6 +37,8 @@
 
 using namespace std;
 
+const char *dir_name = "tests_out";
+
 void print_usage() {
   printf("\nTesting Sqlite Index Blaster\n");
   printf("---------------------------\n\n");
@@ -410,9 +412,9 @@ bool test_census(int page_size, int cache_size, const char *filename) {
   sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
   if (run_cmd(cmd)) {
       sprintf(cmd, "sqlite3 %s \"select cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi,"
-                    " pctaian, pct2prace, pcthispanic from surnames order by name, rank\" > census.txt", filename);
+                    " pctaian, pct2prace, pcthispanic from surnames order by name, rank\" > tests_out/census.txt", filename);
       run_cmd(cmd);
-      strcpy(cmd, "cmp census.txt sample_data/census_cmp.txt");
+      strcpy(cmd, "cmp tests_out/census.txt sample_data/census_cmp.txt");
       return run_cmd(cmd);
   }
 
@@ -424,7 +426,7 @@ bool test_census() {
   for (int i = 9; i < 17; i++) {
     char filename[30];
     int page_size = 1 << i;
-    sprintf(filename, "census_%d.db", page_size);
+    sprintf(filename, "tests_out/census_%d.db", page_size);
     cout << "Testing " << filename << endl;
     bool ret = test_census(page_size, 4096, filename);
     if (!ret)
@@ -499,9 +501,9 @@ bool test_babynames(int page_size, int cache_size, const char *filename) {
   char cmd[100];
   sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
   if (run_cmd(cmd)) {
-      sprintf(cmd, "sqlite3 %s \"select * from gendered_names order by state,name\" > babynames.txt", filename);
+      sprintf(cmd, "sqlite3 %s \"select * from gendered_names order by state,name\" > tests_out/babynames.txt", filename);
       run_cmd(cmd);
-      strcpy(cmd, "cmp babynames.txt sample_data/babynames_cmp.txt");
+      strcpy(cmd, "cmp tests_out/babynames.txt sample_data/babynames_cmp.txt");
       return run_cmd(cmd);
   }
 
@@ -513,7 +515,7 @@ bool test_babynames() {
   for (int i = 9; i < 17; i++) {
     char filename[30];
     int page_size = 1 << i;
-    sprintf(filename, "babynames_%d.db", page_size);
+    sprintf(filename, "tests_out/babynames_%d.db", page_size);
     cout << "Testing " << filename << endl;
     bool ret = test_babynames(page_size, 4096, filename);
     if (!ret)
@@ -523,6 +525,42 @@ bool test_babynames() {
 }
 
 const string const_kv = "key, value";
+
+bool test_wordfreq() {
+  for (int i = 9; i < 17; i++) {
+    char filename[30];
+    int page_size = 1 << i;
+    sprintf(filename, "tests_out/wordfreq_%d.db", page_size);
+    cout << "Testing " << filename << endl;
+    remove(filename);
+    sqlite_index_blaster *sqib = new sqlite_index_blaster(2, 1, const_kv,
+                                    "word_freq", page_size, 1024, filename);
+    ifstream file("sample_data/word_freq.txt");
+    if (file.is_open()) {
+        string line;
+        while (getline(file, line)) {
+          uint8_t rec[line.length() + 100];
+          const void *col_values[1] = {line.c_str()};
+          int rec_len = sqib->make_new_rec(rec, 1, col_values, NULL, NULL);
+          sqib->put(rec, -rec_len, NULL, 0);
+        }
+    }
+    file.close();
+    delete sqib;
+    char cmd[100];
+    sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
+    if (run_cmd(cmd)) {
+        sprintf(cmd, "sqlite3 -separator '' %s \"select * from word_freq\" > tests_out/word_freq_sorted.txt", filename);
+        run_cmd(cmd);
+        strcpy(cmd, "cmp tests_out/word_freq_sorted.txt sample_data/word_freq_sorted_uniq.txt");
+        if (!run_cmd(cmd)) {
+          cout << "Compare failed: " << filename << endl;
+          return false;
+        }
+    }
+  }
+  return true;
+}
 
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
   remove(filename);
@@ -576,7 +614,7 @@ bool test_random_data(long start_count, int cache_size) {
   for (int i = 9; i < 17; i++) {
     char filename[30];
     int page_size = 1 << i;
-    sprintf(filename, "test_%d.db", page_size);
+    sprintf(filename, "tests_out/test_%d.db", page_size);
     bool ret = test_random_data(page_size, start_count, cache_size, filename);
     if (!ret)
       return false;
@@ -600,17 +638,22 @@ int main(int argc, char *argv[]) {
   } else
   if (argc == 2 && strcmp(argv[1], "-t") == 0) {
     int ret = 1;
+    if (!file_exists(dir_name))
+      // 777 (rwx) not required, but getting Permission denied otherwise
+      mkdir(dir_name, 0777);
     // test with lowest possible cache size
-    if (test_random_data(150000, 256)) {
+   if (test_random_data(150000, 256)) {
       // test file > 1gb
-      //if (test_random_data(1400000, 64 * 1024)) {
-        if (test_babynames()) {
-          if (test_census()) {
-            cout << "All tests ok" << endl;
-            ret = 0;
-          }
+      // if (test_random_data(1400000, 64 * 1024)) {
+       if (test_babynames()) {
+         if (test_census()) {
+            if (test_wordfreq()) {
+              cout << "All tests ok" << endl;
+              ret = 0;
+            }
+         }
         }
-      //}
+      // }
     }
     return ret;
   } else

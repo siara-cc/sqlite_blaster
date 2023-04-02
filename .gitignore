@@ -7,4 +7,5 @@ test_sqlite_blaster
 test.cpp
 a.out
 test
+tests_out/*
 

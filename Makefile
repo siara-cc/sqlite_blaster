@@ -16,7 +16,7 @@ test_sqlite_blaster: test_sqlite_blaster.cpp src/*.h
 
 clean:
 	rm test_sqlite_blaster
-	rm *.db
+	rm -f tests_out/*.db
 	rm *.txt
 
 #build/.o: src/imain.cpp src/*.h
