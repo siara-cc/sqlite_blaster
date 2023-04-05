@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "sqlite_index_blaster.h"
+#include "sqlite_appendix.h"
 
 using namespace std;
 
@@ -562,6 +563,43 @@ bool test_wordfreq() {
   return true;
 }
 
+bool test_appendix() {
+  for (int i = 9; i < 17; i++) {
+    char filename[30];
+    int page_size = 1 << i;
+    sprintf(filename, "tests_out/wf_append_%d.db", page_size);
+    cout << "Testing " << filename << endl;
+    remove(filename);
+    sqlite_appendix *sqa = new sqlite_appendix(filename, page_size, 0, 2, 1, "key", "word_freq");
+    ifstream file("sample_data/word_freq_sorted_uniq.txt");
+    if (file.is_open()) {
+        string line;
+        while (getline(file, line)) {
+          uint8_t rec[line.length() + 100];
+          const void *col_values[1] = {line.c_str()};
+          if (sqa->append_rec(col_values) != SQLT_RES_OK) {
+            file.close();
+            return false;
+          }
+        }
+    }
+    file.close();
+    delete sqa;
+    char cmd[150];
+    sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
+    if (run_cmd(cmd)) {
+        sprintf(cmd, "sqlite3 -separator '' %s \"select * from word_freq\" > tests_out/word_freq_appended.txt", filename);
+        run_cmd(cmd);
+        strcpy(cmd, "cmp tests_out/word_freq_appended.txt sample_data/word_freq_sorted_uniq.txt");
+        if (!run_cmd(cmd)) {
+          cout << "Compare failed: " << filename << endl;
+          return false;
+        }
+    }
+  }
+  return true;
+}
+
 bool test_random_data(int page_size, long start_count, int cache_size, char *filename) {
   remove(filename);
   int U = page_size - 5;
@@ -648,8 +686,10 @@ int main(int argc, char *argv[]) {
        if (test_babynames()) {
          if (test_census()) {
             if (test_wordfreq()) {
-              cout << "All tests ok" << endl;
-              ret = 0;
+              //if (test_appendix()) {
+                cout << "All tests ok" << endl;
+                ret = 0;
+              //}
             }
          }
         }

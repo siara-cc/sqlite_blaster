@@ -19,7 +19,8 @@ enum {SQLT_RES_SEEK_ERR = -6, SQLT_RES_READ_ERR = -7,
   SQLT_RES_INVALID_SIG = -8, SQLT_RES_MALFORMED = -9,
   SQLT_RES_NOT_FOUND = -10, SQLT_RES_NOT_FINALIZED = -11,
   SQLT_RES_TYPE_MISMATCH = -12, SQLT_RES_INV_CHKSUM = -13,
-  SQLT_RES_NEED_1_PK = -14, SQLT_RES_NO_SPACE = -15};
+  SQLT_RES_NEED_1_PK = -14, SQLT_RES_NO_SPACE = -15,
+  SQLT_RES_CLOSED = -16};
 
 class sqlite_common {
 
@@ -104,7 +105,7 @@ class sqlite_common {
             return col_data_lens[types[i]];
         }
 
-        static int write_new_rec(uint8_t block[], int pos, int64_t rowid, int col_count, const void *values[],
+        static int write_new_rec(uint8_t block[], int pos, int64_t rowid_or_child_pageno, int col_count, const void *values[],
                 const size_t value_lens[] = NULL, const uint8_t types[] = NULL, uint8_t *ptr = NULL) {
 
             int data_len = 0;
@@ -122,8 +123,11 @@ class sqlite_common {
             int hdr_len_vlen = util::get_vlen_of_uint32(hdr_len);
             hdr_len += hdr_len_vlen;
             int rowid_len = 0;
-            if (block[offset] == 10 || block[offset] == 13)
-                rowid_len = util::get_vlen_of_uint64(rowid);
+            if (block[offset] == 5 || block[offset] == 13)
+                rowid_len = util::get_vlen_of_uint64(rowid_or_child_pageno);
+            else if (block[offset] == 2)
+                rowid_len = 4;
+
             int rec_len = hdr_len + data_len;
             int rec_len_vlen = util::get_vlen_of_uint32(rec_len);
 
@@ -136,7 +140,7 @@ class sqlite_common {
                 if (last_pos == 0)
                     last_pos = 65536;
                 int ptr_len = util::read_uint16(block + offset + 3) << 1;
-                if (offset + blk_hdr_len + ptr_len + rec_len + rec_len_vlen >= last_pos)
+                if (offset + blk_hdr_len + ptr_len + rowid_len + rec_len + rec_len_vlen >= last_pos)
                     return SQLT_RES_NO_SPACE;
                 last_pos -= rec_len;
                 last_pos -= rec_len_vlen;
@@ -145,9 +149,13 @@ class sqlite_common {
             }
 
             if (!is_ptr_given) {
+                if (block[offset] == 2) {
+                    util::write_uint32(ptr, rowid_or_child_pageno);
+                    ptr += 4;
+                }
                 ptr += util::write_vint32(ptr, rec_len);
-                if (block[offset] == 10 || block[offset] == 13)
-                    ptr += util::write_vint64(ptr, rowid);
+                if (block[offset] == 5 || block[offset] == 13)
+                    ptr += util::write_vint64(ptr, rowid_or_child_pageno);
             }
             ptr += util::write_vint32(ptr, hdr_len);
             for (int i = 0; i < col_count; i++) {

@@ -849,15 +849,15 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             return current_block[block_size - page_resv_bytes] & 0x40;
         }
 
-        static void set_block_changed(uint8_t *block, int block_size, bool is_changed) {
+        static void set_block_changed(uint8_t *block, int block_sz, bool is_changed) {
             if (is_changed)
-                block[block_size - page_resv_bytes] |= 0x40;
+                block[block_sz - page_resv_bytes] |= 0x40;
             else
-                block[block_size - page_resv_bytes] &= 0xBF;
+                block[block_sz - page_resv_bytes] &= 0xBF;
         }
 
-        static bool is_block_changed(uint8_t *block, int block_size) {
-            return block[block_size - page_resv_bytes] & 0x40;
+        static bool is_block_changed(uint8_t *block, int block_sz) {
+            return block[block_sz - page_resv_bytes] & 0x40;
         }
 
         inline bool is_leaf() {
