@@ -498,7 +498,7 @@ bool test_babynames(int page_size, int cache_size, const char *filename) {
       file.close();
   }
   delete sqib;
-  char cmd[100];
+  char cmd[150];
   sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
   if (run_cmd(cmd)) {
       sprintf(cmd, "sqlite3 %s \"select * from gendered_names order by state,name\" > tests_out/babynames.txt", filename);
@@ -547,7 +547,7 @@ bool test_wordfreq() {
     }
     file.close();
     delete sqib;
-    char cmd[100];
+    char cmd[150];
     sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
     if (run_cmd(cmd)) {
         sprintf(cmd, "sqlite3 -separator '' %s \"select * from word_freq\" > tests_out/word_freq_sorted.txt", filename);
@@ -618,7 +618,7 @@ bool test_random_data(long start_count, int cache_size) {
     bool ret = test_random_data(page_size, start_count, cache_size, filename);
     if (!ret)
       return false;
-    char cmd[100];
+    char cmd[150];
     sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
     return run_cmd(cmd);
   }
