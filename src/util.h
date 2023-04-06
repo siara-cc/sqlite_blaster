@@ -196,6 +196,20 @@ class util {
     }
 
     // Reads and returns variable integer
+    // from given location as int64_t
+    // Also returns the length of the varint
+    static int64_t read_vint64(const uint8_t *ptr, int8_t *vlen) {
+        int64_t ret = 0;
+        int8_t len = 0; // read max 8 bytes
+        do {
+            ret = (ret << (len == 8 ? 8 : 7)) + (*ptr & (len == 8 ? 0xFF : 0x7F));
+        } while (++len < 9 && (*ptr++ & 0x80) == 0x80);
+        if (vlen)
+            *vlen = len;
+        return ret;
+    }
+
+    // Reads and returns variable integer
     // from given location as uint16_t
     // Also returns the length of the varint
     static uint16_t read_vint16(const uint8_t *ptr, int8_t *vlen) {

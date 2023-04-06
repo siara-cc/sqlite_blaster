@@ -11,7 +11,7 @@
 #include <iostream>
 #include "sqlite_common.h"
 
-class sqlite_appendix {
+class sqlite_appendix : public sqlite_common {
 
     private:
         int U, X, M;
@@ -59,6 +59,7 @@ class sqlite_appendix {
                 fclose(fp);
             fp = NULL;
         }
+
         void write_completed_page(int page_idx, const void *values[], const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
             uint8_t *target_block = cur_pages[page_idx];
             uint32_t completed_page = ++last_page_no;
@@ -66,23 +67,25 @@ class sqlite_appendix {
             uint8_t *new_block = new uint8_t[block_size];
             cur_pages[page_idx] = new_block;
             if (target_block[0] == 2)
-                sqlite_common::init_bt_idx_interior(new_block, block_size, pg_resv_bytes);
+                init_bt_idx_interior(new_block, block_size, pg_resv_bytes);
             else
-                sqlite_common::init_bt_idx_leaf(new_block, block_size, pg_resv_bytes);
+                init_bt_idx_leaf(new_block, block_size, pg_resv_bytes);
             page_idx++;
-            if (page_idx <= cur_pages.size()) {
+            if (page_idx < cur_pages.size()) {
                 target_block = cur_pages[page_idx];
                 int new_rec_no = util::read_uint16(target_block + 3);
-                int res = sqlite_common::write_new_rec(target_block, new_rec_no, 0, column_count, values, value_lens, types);
-                if (res == SQLT_RES_NO_SPACE)
+                int res = write_new_rec(target_block, new_rec_no, 0, column_count, values, value_lens, types);
+                if (res == SQLT_RES_NO_SPACE) {
+                    util::write_uint32(target_block + 8, completed_page);
                     write_completed_page(page_idx, values, value_lens, types);
-                else
+                } else
                     util::write_uint32(target_block + util::read_uint16(target_block + 5), completed_page);
             } else {
                 uint8_t *new_root_block = new uint8_t[block_size];
-                sqlite_common::init_bt_idx_interior(new_root_block, block_size, pg_resv_bytes);
-                int res = sqlite_common::write_new_rec(new_root_block, 0, 0, column_count, values, value_lens, types);
-                util::write_uint32(target_block + util::read_uint16(target_block + 5), completed_page);
+                init_bt_idx_interior(new_root_block, block_size, pg_resv_bytes);
+                write_new_rec(new_root_block, 0, 0, column_count, values, value_lens, types);
+                util::write_uint32(new_root_block + util::read_uint16(new_root_block + 5), completed_page);
+                cur_pages.push_back(new_root_block);
             }
         }
 
@@ -96,6 +99,17 @@ class sqlite_appendix {
                 write_page(last_block, rightmost_page_no * block_size, block_size);
                 rightmost_page_no++;
             }
+            int type_or_len, col_len, col_type;
+            uint8_t *rec_ptr = master_block + util::read_uint16(master_block + 105);
+            int8_t vlen;
+            util::read_vint64(rec_ptr, &vlen);
+            rec_ptr += vlen;
+            util::read_vint32(rec_ptr, &vlen);
+            rec_ptr += vlen;
+            uint8_t *data_ptr = locate_col(3, rec_ptr, type_or_len, col_len, col_type);
+            util::write_uint32(data_ptr, last_page_no);
+            util::write_uint32(master_block + 28, last_page_no);
+            write_page(master_block, 0, block_size);
         }
 
     public:
@@ -110,7 +124,7 @@ class sqlite_appendix {
             M = ((U-12)*32/255)-23;
             open_file();
             master_block = new uint8_t[block_size];
-            sqlite_common::fill_page0(master_block, column_count, pk_col_count,
+            fill_page0(master_block, column_count, pk_col_count,
                     block_size, resv_bytes, column_names, table_name);
             write_page(master_block, 0, block_size);
             last_page_no = 1;

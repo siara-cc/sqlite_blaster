@@ -15,7 +15,7 @@
 #define page_resv_bytes 5
 
 // CRTP see https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern
-class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
+class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public sqlite_common {
 
     private:
         int U,X,M;
@@ -123,7 +123,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             if (cache_size > 0) {
                 if (cache->is_empty()) {
                     master_block = new uint8_t[block_size];
-                    sqlite_common::fill_page0(master_block, column_count, pk_count,
+                    fill_page0(master_block, column_count, pk_count,
                             block_size, page_resv_bytes, column_names, table_name);
                     cache->write_page(master_block, 0, block_size);
                 } else {
@@ -133,24 +133,6 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
                 }
             }
             set_current_block_root();
-        }
-
-        uint8_t *locate_col(int which_col, uint8_t *rec, int& col_type_or_len, int& col_len, int& col_type) {
-            int8_t vlen;
-            int hdr_len = util::read_vint32(rec, &vlen);
-            int hdr_pos = vlen;
-            uint8_t *data_ptr = rec + hdr_len;
-            col_len = vlen = 0;
-            do {
-                data_ptr += col_len;
-                hdr_pos += vlen;
-                if (hdr_pos >= hdr_len)
-                    return NULL;
-                col_type_or_len = util::read_vint32(rec + hdr_pos, &vlen);
-                col_len = derive_data_len(col_type_or_len);
-                col_type = derive_col_type(col_type_or_len);
-            } while (which_col--);
-            return data_ptr;
         }
 
         int compare_keys(const uint8_t *rec1, int rec1_len, const uint8_t *rec2, int rec2_len) {
@@ -426,9 +408,9 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
             //    new_page = (uint8_t *) util::aligned_alloc(size);
             if (type != BPT_BLK_TYPE_OVFL) {
                 if (type == BPT_BLK_TYPE_INTERIOR)
-                    sqlite_common::init_bt_idx_interior(new_page, block_size, page_resv_bytes);
+                    init_bt_idx_interior(new_page, block_size, page_resv_bytes);
                 else
-                    sqlite_common::init_bt_idx_leaf(new_page, block_size, page_resv_bytes);
+                    init_bt_idx_leaf(new_page, block_size, page_resv_bytes);
             }
             return new_page;
         }
@@ -731,72 +713,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
 
         int make_new_rec(uint8_t *ptr, int col_count, const void *values[], 
                 const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
-            return sqlite_common::write_new_rec(current_block, -1, 0, col_count, values, value_lens, types, ptr);
-        }
-
-        // See .h file for API description
-        uint32_t derive_data_len(uint32_t col_type_or_len) {
-            if (col_type_or_len >= 12) {
-                if (col_type_or_len % 2)
-                    return (col_type_or_len - 13)/2;
-                return (col_type_or_len - 12)/2; 
-            } else if (col_type_or_len < 10)
-                return col_data_lens[col_type_or_len];
-            return 0;
-        }
-
-        // See .h file for API description
-        uint32_t derive_col_type(uint32_t col_type_or_len) {
-            if (col_type_or_len >= 12) {
-                if (col_type_or_len % 2)
-                    return SQLT_TYPE_TEXT;
-                return SQLT_TYPE_BLOB;
-            } else if (col_type_or_len < 10)
-                return col_type_or_len;
-            return 0;
-        }
-
-        int read_col(int which_col, uint8_t *rec, int rec_len, void *out) {
-            int col_type_or_len, col_len, col_type;
-            uint8_t *data_ptr = locate_col(which_col, rec, col_type_or_len, col_len, col_type);
-            if (data_ptr == NULL)
-                return SQLT_RES_MALFORMED;
-            switch (col_type) {
-                case SQLT_TYPE_BLOB:
-                case SQLT_TYPE_TEXT:
-                    memcpy(out, data_ptr, col_len);
-                    return col_len;
-                case SQLT_TYPE_NULL:
-                    return col_type_or_len;
-                case SQLT_TYPE_INT0:
-                    *((int8_t *) out) = 0;
-                    return col_len;
-                case SQLT_TYPE_INT1:
-                    *((int8_t *) out) = 1;
-                    return col_len;
-                case SQLT_TYPE_INT8:
-                    *((int8_t *) out) = *data_ptr;
-                    return col_len;
-                case SQLT_TYPE_INT16:
-                    *((int16_t *) out) = util::read_uint16(data_ptr);
-                    return col_len;
-                case SQLT_TYPE_INT24:
-                    *((int32_t *) out) = util::read_int24(data_ptr);
-                    return col_len;
-                case SQLT_TYPE_INT32:
-                    *((int32_t *) out) = util::read_uint32(data_ptr);
-                    return col_len;
-                case SQLT_TYPE_INT48:
-                    *((int64_t *) out) = util::read_int48(data_ptr);
-                    return col_len;
-                case SQLT_TYPE_INT64:
-                    *((int64_t *) out) = util::read_uint64(data_ptr);
-                    return col_len;
-                case SQLT_TYPE_REAL:
-                    *((double *) out) = util::read_double(data_ptr);
-                    return col_len;
-            }
-            return SQLT_RES_MALFORMED;
+            return write_new_rec(current_block, -1, 0, col_count, values, value_lens, types, ptr);
         }
 
         int search_current_block(bptree_iter_ctx *ctx = NULL) {
@@ -866,9 +783,9 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster> {
 
         void set_leaf(char is_leaf) {
             if (is_leaf)
-                sqlite_common::init_bt_idx_leaf(current_block, block_size, page_resv_bytes);
+                init_bt_idx_leaf(current_block, block_size, page_resv_bytes);
             else
-                sqlite_common::init_bt_idx_interior(current_block, block_size, page_resv_bytes);
+                init_bt_idx_interior(current_block, block_size, page_resv_bytes);
             blk_hdr_len = (current_block[0] == 10 || current_block[0] == 13 ? 8 : 12);
         }
 

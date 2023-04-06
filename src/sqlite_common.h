@@ -1,5 +1,5 @@
-#ifndef SIARA_SQLITE_COMMON
-#define SIARA_SQLITE_COMMON
+#ifndef SIARA_SQLITE3_COMMON
+#define SIARA_SQLITE3_COMMON
 
 #include <string>
 #include <stdlib.h>
@@ -65,6 +65,89 @@ class sqlite_common {
             } else
                 memcpy(data_ptr, val, len);
             return len;
+        }
+
+        uint8_t *locate_col(int which_col, uint8_t *rec, int& col_type_or_len, int& col_len, int& col_type) {
+            int8_t vlen;
+            int hdr_len = util::read_vint32(rec, &vlen);
+            int hdr_pos = vlen;
+            uint8_t *data_ptr = rec + hdr_len;
+            col_len = vlen = 0;
+            do {
+                data_ptr += col_len;
+                hdr_pos += vlen;
+                if (hdr_pos >= hdr_len)
+                    return NULL;
+                col_type_or_len = util::read_vint32(rec + hdr_pos, &vlen);
+                col_len = derive_data_len(col_type_or_len);
+                col_type = derive_col_type(col_type_or_len);
+            } while (which_col--);
+            return data_ptr;
+        }
+
+        // See .h file for API description
+        uint32_t derive_data_len(uint32_t col_type_or_len) {
+            if (col_type_or_len >= 12) {
+                if (col_type_or_len % 2)
+                    return (col_type_or_len - 13)/2;
+                return (col_type_or_len - 12)/2; 
+            } else if (col_type_or_len < 10)
+                return col_data_lens[col_type_or_len];
+            return 0;
+        }
+
+        // See .h file for API description
+        uint32_t derive_col_type(uint32_t col_type_or_len) {
+            if (col_type_or_len >= 12) {
+                if (col_type_or_len % 2)
+                    return SQLT_TYPE_TEXT;
+                return SQLT_TYPE_BLOB;
+            } else if (col_type_or_len < 10)
+                return col_type_or_len;
+            return 0;
+        }
+
+        int read_col(int which_col, uint8_t *rec, int rec_len, void *out) {
+            int col_type_or_len, col_len, col_type;
+            uint8_t *data_ptr = locate_col(which_col, rec, col_type_or_len, col_len, col_type);
+            if (data_ptr == NULL)
+                return SQLT_RES_MALFORMED;
+            switch (col_type) {
+                case SQLT_TYPE_BLOB:
+                case SQLT_TYPE_TEXT:
+                    memcpy(out, data_ptr, col_len);
+                    return col_len;
+                case SQLT_TYPE_NULL:
+                    return col_type_or_len;
+                case SQLT_TYPE_INT0:
+                    *((int8_t *) out) = 0;
+                    return col_len;
+                case SQLT_TYPE_INT1:
+                    *((int8_t *) out) = 1;
+                    return col_len;
+                case SQLT_TYPE_INT8:
+                    *((int8_t *) out) = *data_ptr;
+                    return col_len;
+                case SQLT_TYPE_INT16:
+                    *((int16_t *) out) = util::read_uint16(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT24:
+                    *((int32_t *) out) = util::read_int24(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT32:
+                    *((int32_t *) out) = util::read_uint32(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT48:
+                    *((int64_t *) out) = util::read_int48(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_INT64:
+                    *((int64_t *) out) = util::read_uint64(data_ptr);
+                    return col_len;
+                case SQLT_TYPE_REAL:
+                    *((double *) out) = util::read_double(data_ptr);
+                    return col_len;
+            }
+            return SQLT_RES_MALFORMED;
         }
 
         // Initializes the buffer as a B-Tree Leaf Index
@@ -140,7 +223,7 @@ class sqlite_common {
                 if (last_pos == 0)
                     last_pos = 65536;
                 int ptr_len = util::read_uint16(block + offset + 3) << 1;
-                if (offset + blk_hdr_len + ptr_len + rowid_len + rec_len + rec_len_vlen >= last_pos)
+                if (offset + blk_hdr_len + ptr_len + rowid_len + rec_len + rec_len_vlen + 1 >= last_pos)
                     return SQLT_RES_NO_SPACE;
                 last_pos -= rec_len;
                 last_pos -= rec_len_vlen;
