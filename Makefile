@@ -17,7 +17,7 @@ test_sqlite_blaster: test_sqlite_blaster.cpp src/*.h
 clean:
 	rm test_sqlite_blaster
 	rm -f tests_out/*.db
-	rm *.txt
+	rm -f tests_out/*.txt
 
 #build/.o: src/imain.cpp src/*.h
 #   $(CXX) $(CXXFLAGS) $(INCLUDES) -c src/imain.cpp -o build/imain.o

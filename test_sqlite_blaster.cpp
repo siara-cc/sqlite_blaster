@@ -565,45 +565,44 @@ bool test_wordfreq() {
 
 bool test_appendix() {
   for (int i = 9; i < 17; i++) {
-    char filename[30];
-    int page_size = 1 << i;
-    sprintf(filename, "tests_out/wf_append_%d.db", page_size);
-    cout << "Testing " << filename << endl;
-    remove(filename);
-    sqlite_appendix *sqa = new sqlite_appendix(filename, page_size, 0, 1, 1, "key", "word_freq");
-    // for (int i = 0; i < 1000000; i++) {
-    //   char s[100];
-    //   sprintf(s, "Testing %05d", i);
-    //   if (i == 100018)
-    //     cout << "i = 100018" << endl;
-    //   sqa->append_rec((const void*[]) {s});
-    // }
-    // delete sqa;
-    // return true;
-    ifstream file("sample_data/word_freq_sorted_uniq.txt");
-    if (file.is_open()) {
-        string line;
-        while (getline(file, line)) {
-          uint8_t rec[line.length() + 100];
-          const void *col_values[1] = {line.c_str()};
-          if (sqa->append_rec(col_values) != SQLT_RES_OK) {
-            file.close();
-            return false;
+  //for (int i = 16; i < 17; i++) {
+    for (int j = 0; j < 4; j++) {
+      char filename[30];
+      int page_size = 1 << i;
+      sprintf(filename, "tests_out/wf_append_%d_%d.db", page_size, j);
+      cout << "Testing " << filename << endl;
+      remove(filename);
+      sqlite_appendix *sqa = new sqlite_appendix(filename, page_size, 0, 1, 1, "key", "word_freq");
+      ifstream file("sample_data/word_freq_sorted_uniq.txt");
+      ofstream file_out("tests_out/word_freq_out.txt");
+      if (file.is_open()) {
+          string line;
+          while (getline(file, line)) {
+            uint8_t rec[line.length() + 100];
+            const void *col_values[1] = {line.c_str()};
+            if (sqa->append_rec(col_values) != SQLT_RES_OK) {
+              file.close();
+              return false;
+            }
+            file_out << line << endl;
+            if (sqa->is_testcase(j))
+              break;
           }
-        }
-    }
-    file.close();
-    delete sqa;
-    char cmd[150];
-    sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
-    if (run_cmd(cmd)) {
-        sprintf(cmd, "sqlite3 -separator '' %s \"select * from word_freq\" > tests_out/word_freq_appended.txt", filename);
-        run_cmd(cmd);
-        strcpy(cmd, "cmp tests_out/word_freq_appended.txt sample_data/word_freq_sorted_uniq.txt");
-        if (!run_cmd(cmd)) {
-          cout << "Compare failed: " << filename << endl;
-          return true;
-        }
+      }
+      file.close();
+      file_out.close();
+      delete sqa;
+      char cmd[150];
+      sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
+      if (run_cmd(cmd)) {
+          sprintf(cmd, "sqlite3 -separator '' %s \"select * from word_freq\" > tests_out/word_freq_appended.txt", filename);
+          run_cmd(cmd);
+          strcpy(cmd, "cmp tests_out/word_freq_appended.txt tests_out/word_freq_out.txt");
+          if (!run_cmd(cmd)) {
+            cout << "Compare failed: " << filename << endl;
+            return true;
+          }
+      }
     }
   }
   return true;
