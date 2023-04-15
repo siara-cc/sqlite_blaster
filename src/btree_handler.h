@@ -236,21 +236,21 @@ public:
             num_levels = ctx->last_page_lvl + 1;
             if (only_if_not_full) {
                 if (descendant->is_full(~search_result)) {
-                    if (is_ctx_given)
+                    if (!is_ctx_given)
                         delete ctx;
                     return false;
                 }
             }
             recursive_update(search_result, ctx, ctx->last_page_lvl);
             if (search_result >= 0) {
-                if (is_ctx_given)
+                if (!is_ctx_given)
                     delete ctx;
                 descendant->set_changed(1);
                 return true;
             }
         }
         total_size++;
-        if (is_ctx_given)
+        if (!is_ctx_given)
             delete ctx;
         return false;
     }

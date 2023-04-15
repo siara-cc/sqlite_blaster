@@ -8,7 +8,8 @@ INCLUDES = -I./src
 opt: CXXFLAGS += -O3 -funroll-loops -DNDEBUG
 opt: test_sqlite_blaster
 
-debug: CXXFLAGS += -g -O0 -fno-inline -fsanitize=address
+debug: CXXFLAGS += -g -O0 -fno-inline
+# -fsanitize=address -static-libsan
 debug: test_sqlite_blaster
 
 test_sqlite_blaster: test_sqlite_blaster.cpp src/*.h
