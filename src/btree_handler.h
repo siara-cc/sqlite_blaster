@@ -150,7 +150,7 @@ public:
         return current_block;
     }
 
-    std::string get_string(std::string& key, std::string& not_found_value) {
+    std::string get_string(std::string& key, std::string not_found_value) {
         bool ret = get(key.c_str(), key.length(), NULL, NULL);
         if (ret) {
             uint8_t *val = (uint8_t *) malloc(key_at_len);

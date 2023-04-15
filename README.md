@@ -59,11 +59,13 @@ In this mode, a table is created with just 2 columns, `key` and `value` as shown
 
 int main() {
 
-    std::string col_names = "key, value"; // -std >= c++11
+    std::string col_names = "key, value";
     sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
-    sqib.put_string("hello", "world");
+    std::string key = "hello";
+    std::string val = "world";
+    sqib.put_string(key, val);
+    sqib.close();
     return 0;
-    // db file is flushed and closed when sqib is destroyed
 
 }
 ```
@@ -91,10 +93,13 @@ To retrieve the inserted values, use `get` method as shown below
 #include <string>
 
 int main() {
-    std::string col_names = "key, value"; // -std >= c++11
+    std::string col_names = "key, value";
     sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
-    sqib.put_string("hello", "world");
-    std::cout << "Value of hello is " << sqib.get_string("hello", "not_found") << std::endl;
+    std::string key = "hello";
+    std::string val = "world";
+    sqib.put_string(key, val);
+    std::cout << "Value of hello is " << sqib.get_string(key, "not_found") << std::endl;
+    sqib.close();
     return 0;
 }
 ```
@@ -107,14 +112,17 @@ In this mode, a table is created with just 2 columns, `key` and `doc` as shown b
 #include "sqlite_index_blaster.h"
 #include <string>
 
-const char * json1 = "{\"name\": \"Alice\", \"age\": 25, \"email\": \"alice@example.com\"}";
-const char * json2 = "{\"name\": \"George\", \"age\": 32, \"email\": \"george@example.com\"}";
+std::string json1 = "{\"name\": \"Alice\", \"age\": 25, \"email\": \"alice@example.com\"}";
+std::string json2 = "{\"name\": \"George\", \"age\": 32, \"email\": \"george@example.com\"}";
 
 int main() {
-    std::string col_names = "key, doc"; // -std >= c++11
+    std::string col_names = "key, doc";
     sqlite_index_blaster sqib(2, 1, col_names, "doc_index", 4096, 40, "doc_store.db");
-    sqib.put_string("primary_contact", json1);
-    sqib.put_string("secondary_contact", json2);
+    std::string pc = "primary_contact";
+    sqib.put_string(pc, json1);
+    std::string sc = "secondary_contact";
+    sqib.put_string(sc, json2);
+    sqib.close();
     return 0;
 }
 ```
