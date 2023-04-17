@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+namespace sqib {
+
 class util {
   public:
     // Returns how many bytes the given integer will
@@ -293,5 +295,7 @@ class util {
     }
 
 };
+
+} // namespace sqib
 
 #endif

@@ -14,6 +14,8 @@
 
 #define page_resv_bytes 5
 
+namespace sqib {
+
 // CRTP see https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern
 class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public sqlite_common {
 
@@ -30,25 +32,25 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
 
         int64_t cvt_to_int64(const uint8_t *ptr, int type) {
             switch (type) {
-                case SQLT_TYPE_NULL:
-                case SQLT_TYPE_INT0:
+                case SQIB_TYPE_NULL:
+                case SQIB_TYPE_INT0:
                     return 0;
-                case SQLT_TYPE_INT1:
+                case SQIB_TYPE_INT1:
                     return 1;
-                case SQLT_TYPE_INT8:
+                case SQIB_TYPE_INT8:
                     return ptr[0];
-                case SQLT_TYPE_INT16:
+                case SQIB_TYPE_INT16:
                     return util::read_uint16(ptr);
-                case SQLT_TYPE_INT32:
+                case SQIB_TYPE_INT32:
                     return util::read_uint32(ptr);
-                case SQLT_TYPE_INT48:
+                case SQIB_TYPE_INT48:
                     return util::read_uint48(ptr);
-                case SQLT_TYPE_INT64:
+                case SQIB_TYPE_INT64:
                     return util::read_uint64(ptr);
-                case SQLT_TYPE_REAL:
+                case SQIB_TYPE_REAL:
                     return util::read_double(ptr);
-                case SQLT_TYPE_BLOB:
-                case SQLT_TYPE_TEXT:
+                case SQIB_TYPE_BLOB:
+                case SQIB_TYPE_TEXT:
                     return 0; // TODO: do atol?
             }
             return -1; // should not reach here
@@ -57,25 +59,25 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
         // TODO: sqlite seems checking INT_MAX and INT_MIN when converting integers
         double cvt_to_dbl(const uint8_t *ptr, int type) {
             switch (type) {
-                case SQLT_TYPE_REAL:
+                case SQIB_TYPE_REAL:
                     return util::read_double(ptr);
-                case SQLT_TYPE_NULL:
-                case SQLT_TYPE_INT0:
+                case SQIB_TYPE_NULL:
+                case SQIB_TYPE_INT0:
                     return 0;
-                case SQLT_TYPE_INT1:
+                case SQIB_TYPE_INT1:
                     return 1;
-                case SQLT_TYPE_INT8:
+                case SQIB_TYPE_INT8:
                     return ptr[0];
-                case SQLT_TYPE_INT16:
+                case SQIB_TYPE_INT16:
                     return util::read_uint16(ptr);
-                case SQLT_TYPE_INT32:
+                case SQIB_TYPE_INT32:
                     return util::read_uint32(ptr);
-                case SQLT_TYPE_INT48:
+                case SQIB_TYPE_INT48:
                     return util::read_uint48(ptr);
-                case SQLT_TYPE_INT64:
+                case SQIB_TYPE_INT64:
                     return util::read_uint64(ptr);
-                case SQLT_TYPE_BLOB:
-                case SQLT_TYPE_TEXT:
+                case SQIB_TYPE_BLOB:
+                case SQIB_TYPE_TEXT:
                     return 0; // TODO: do atol?
             }
             return -1; // should not reach here
@@ -84,31 +86,31 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
         int compare_col(const uint8_t *col1, int col_len1, int col_type1,
                             const uint8_t *col2, int col_len2, int col_type2) {
             switch (col_type1) {
-                case SQLT_TYPE_BLOB:
-                case SQLT_TYPE_TEXT:
-                    if (col_type2 == SQLT_TYPE_TEXT || col_type2 == SQLT_TYPE_BLOB)
+                case SQIB_TYPE_BLOB:
+                case SQIB_TYPE_TEXT:
+                    if (col_type2 == SQIB_TYPE_TEXT || col_type2 == SQIB_TYPE_BLOB)
                         return util::compare(col1, col_len1, col2, col_len2);
-                    if (col_type2 == SQLT_TYPE_NULL)
+                    if (col_type2 == SQIB_TYPE_NULL)
                         return 1;
                     return -1; // incompatible types
-                case SQLT_TYPE_REAL: {
+                case SQIB_TYPE_REAL: {
                     double col1_dbl = util::read_double(col1);
                     double col2_dbl = cvt_to_dbl(col2, col_type2);
                     return (col1_dbl < col2_dbl ? -1 : (col1_dbl > col2_dbl ? 1 : 0));
                     }
-                case SQLT_TYPE_INT0:
-                case SQLT_TYPE_INT1:
-                case SQLT_TYPE_INT8:
-                case SQLT_TYPE_INT16:
-                case SQLT_TYPE_INT32:
-                case SQLT_TYPE_INT48:
-                case SQLT_TYPE_INT64: {
+                case SQIB_TYPE_INT0:
+                case SQIB_TYPE_INT1:
+                case SQIB_TYPE_INT8:
+                case SQIB_TYPE_INT16:
+                case SQIB_TYPE_INT32:
+                case SQIB_TYPE_INT48:
+                case SQIB_TYPE_INT64: {
                     int64_t col1_int64 = cvt_to_int64(col1, col_type1);
                     int64_t col2_int64 = cvt_to_int64(col2, col_type2);
                     return (col1_int64 < col2_int64 ? -1 : (col1_int64 > col2_int64 ? 1 : 0));
                     }
-                case SQLT_TYPE_NULL:
-                    if (col_type2 == SQLT_TYPE_NULL)
+                case SQIB_TYPE_NULL:
+                    if (col_type2 == SQIB_TYPE_NULL)
                         return 0;
                     return -1; // NULL is less than any other type?
             }
@@ -153,10 +155,10 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
                 if (col_len1 >= 12) {
                     if (col_len1 % 2) {
                         col_len1 = (col_len1 - 12) / 2;
-                        col_type1 = SQLT_TYPE_BLOB;
+                        col_type1 = SQIB_TYPE_BLOB;
                     } else {
                         col_len1 = (col_len1 - 13) / 2;
-                        col_type1 = SQLT_TYPE_TEXT;
+                        col_type1 = SQIB_TYPE_TEXT;
                     }
                 } else
                     col_len1 = col_data_lens[col_len1];
@@ -166,10 +168,10 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
                 if (col_len2 >= 12) {
                     if (col_len2 % 2) {
                         col_len2 = (col_len2 - 12) / 2;
-                        col_type2 = SQLT_TYPE_BLOB;
+                        col_type2 = SQIB_TYPE_BLOB;
                     } else {
                         col_len2 = (col_len2 - 13) / 2;
-                        col_type2 = SQLT_TYPE_TEXT;
+                        col_type2 = SQIB_TYPE_TEXT;
                     }
                 } else
                     col_len2 = col_data_lens[col_len2];
@@ -417,15 +419,15 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
 
         uint8_t *split(uint8_t *first_key, int *first_len_ptr) {
             int orig_filled_size = filled_size();
-            uint32_t SQLT_NODE_SIZE = block_size;
+            uint32_t SQIB_NODE_SIZE = block_size;
             int lvl = current_block[0] & 0x1F;
-            uint8_t *b = allocate_block(SQLT_NODE_SIZE, is_leaf(), lvl);
-            sqlite_index_blaster new_block(SQLT_NODE_SIZE, b, is_leaf(), true);
+            uint8_t *b = allocate_block(SQIB_NODE_SIZE, is_leaf(), lvl);
+            sqlite_index_blaster new_block(SQIB_NODE_SIZE, b, is_leaf(), true);
             set_changed(true);
             new_block.set_changed(true);
-            SQLT_NODE_SIZE -= page_resv_bytes;
+            SQIB_NODE_SIZE -= page_resv_bytes;
             int kv_last_pos = get_kv_last_pos();
-            int half_kVLen = SQLT_NODE_SIZE - kv_last_pos + 1;
+            int half_kVLen = SQIB_NODE_SIZE - kv_last_pos + 1;
             half_kVLen /= 2;
 
             // Copy all data to new block in ascending order
@@ -470,19 +472,19 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
             kv_last_pos = get_kv_last_pos();
             if (brk_rec_len) {
                 memmove(new_block.current_block + kv_last_pos + brk_rec_len, new_block.current_block + kv_last_pos,
-                            SQLT_NODE_SIZE - kv_last_pos - brk_rec_len);
+                            SQIB_NODE_SIZE - kv_last_pos - brk_rec_len);
                 kv_last_pos += brk_rec_len;
             }
             {
-                int diff = (SQLT_NODE_SIZE - brk_kv_pos + brk_rec_len);
+                int diff = (SQIB_NODE_SIZE - brk_kv_pos + brk_rec_len);
                 for (new_idx = 0; new_idx < brk_idx; new_idx++) {
                     set_ptr(new_idx, new_block.get_ptr(new_idx) + diff);
                 } // Set index of copied first half in old block
                 // Copy back first half to old block
                 int old_blk_new_len = brk_kv_pos - kv_last_pos;
-                memcpy(current_block + SQLT_NODE_SIZE - old_blk_new_len,
+                memcpy(current_block + SQIB_NODE_SIZE - old_blk_new_len,
                     new_block.current_block + kv_last_pos, old_blk_new_len);
-                set_kv_last_pos(SQLT_NODE_SIZE - old_blk_new_len);
+                set_kv_last_pos(SQIB_NODE_SIZE - old_blk_new_len);
                 set_filled_size(brk_idx);
                 if (!is_leaf()) {
                     uint32_t addr_to_write = brk_child_addr;
@@ -850,5 +852,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
 
 #undef descendant
 #undef BPT_MAX_LVL_COUNT
+
+} // namespace sqib
 
 #endif

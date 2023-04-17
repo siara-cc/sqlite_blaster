@@ -18,6 +18,8 @@
 
 #define descendant static_cast<T*>(this)
 
+namespace sqib {
+
 union page_ptr {
     unsigned long page;
     uint8_t *ptr;
@@ -378,5 +380,7 @@ public:
     }
 
 };
+
+} // namespace sqib
 
 #endif

@@ -37,6 +37,7 @@
 #include "sqlite_appendix.h"
 
 using namespace std;
+using namespace sqib;
 
 const char *dir_name = "tests_out";
 
@@ -112,14 +113,14 @@ void release_parsed_csv(char *parsed_csv[], int col_count) {
 int create_db(int argc, char *argv[]) {
   int page_size = atoi(argv[3]);
   if (!validate_page_size(page_size))
-    return SQLT_RES_ERR;
+    return SQIB_RES_ERR;
   int col_count = atoi(argv[5]);
   int pk_col_count = atoi(argv[6]);
   remove(argv[2]);
   cout << "Creating db " << argv[2] << ", table " << argv[4] << ", page size: " << page_size << endl;
   cout << "Col count: " << col_count << ", pk count: " << pk_col_count << ", Cols: " << argv[7] << endl;
   sqlite_index_blaster sqib(col_count, pk_col_count, argv[7], argv[4], page_size, 400, argv[2]);
-  return SQLT_RES_OK;
+  return SQIB_RES_OK;
 }
 
 bool file_exists(const char *filename) {
@@ -132,7 +133,7 @@ int insert_db(int argc, char *argv[]) {
     cout << "File does not exist" << endl;
   int page_size = atoi(argv[3]);
   if (!validate_page_size(page_size))
-    return SQLT_RES_ERR;
+    return SQIB_RES_ERR;
   int col_count = atoi(argv[4]);
   int pk_col_count = atoi(argv[5]);
   sqlite_index_blaster sqib(col_count, pk_col_count, "", "", page_size, 320, argv[2]);
@@ -144,7 +145,7 @@ int insert_db(int argc, char *argv[]) {
     sqib.put(rec, -rec_len, NULL, 0);
     release_parsed_csv(parsed_csv, col_count);
   }
-  return SQLT_RES_OK;
+  return SQIB_RES_OK;
 }
 
 int read_db(int argc, char *argv[]) {
@@ -152,7 +153,7 @@ int read_db(int argc, char *argv[]) {
     cout << "File does not exist" << endl;
   int page_size = atoi(argv[3]);
   if (!validate_page_size(page_size))
-    return SQLT_RES_ERR;
+    return SQIB_RES_ERR;
   int col_count = atoi(argv[4]);
   int pk_col_count = atoi(argv[5]);
   sqlite_index_blaster sqib(col_count, pk_col_count, "", "", page_size, 320, argv[2]);
@@ -177,7 +178,7 @@ int read_db(int argc, char *argv[]) {
   free(val);
   free(rec);
   release_parsed_csv(parsed_csv, pk_col_count);
-  return SQLT_RES_OK;
+  return SQIB_RES_OK;
 }
 
 // Returns how many bytes the given integer will
@@ -327,8 +328,8 @@ bool run_cmd(char cmd[]) {
 }
 
 const string census_col_names = "cum_prop100k, rank, name, year, count, prop100k, pctwhite, pctblack, pctapi, pctaian, pct2prace, pcthispanic";
-const uint8_t census_col_types[] = {SQLT_TYPE_REAL, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_INT32, SQLT_TYPE_REAL,
-                               SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
+const uint8_t census_col_types[] = {SQIB_TYPE_REAL, SQIB_TYPE_INT32, SQIB_TYPE_TEXT, SQIB_TYPE_INT32, SQIB_TYPE_INT32, SQIB_TYPE_REAL,
+                               SQIB_TYPE_REAL, SQIB_TYPE_REAL, SQIB_TYPE_REAL, SQIB_TYPE_REAL, SQIB_TYPE_REAL, SQIB_TYPE_REAL};
 
 bool test_census(int page_size, int cache_size, const char *filename) {
 
@@ -437,7 +438,7 @@ bool test_census() {
 }
 
 const string baby_col_names = "year, state, name, total_babies, primary_sex, primary_sex_ratio, per_100k_in_state";
-const uint8_t baby_col_types[] = {SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT, SQLT_TYPE_REAL, SQLT_TYPE_REAL};
+const uint8_t baby_col_types[] = {SQIB_TYPE_INT32, SQIB_TYPE_TEXT, SQIB_TYPE_TEXT, SQIB_TYPE_INT32, SQIB_TYPE_TEXT, SQIB_TYPE_REAL, SQIB_TYPE_REAL};
 
 bool test_babynames(int page_size, int cache_size, const char *filename) {
 
@@ -580,7 +581,7 @@ bool test_appendix() {
           while (getline(file, line)) {
             uint8_t rec[line.length() + 100];
             const void *col_values[1] = {line.c_str()};
-            if (sqa->append_rec(col_values) != SQLT_RES_OK) {
+            if (sqa->append_rec(col_values) != SQIB_RES_OK) {
               file.close();
               return false;
             }

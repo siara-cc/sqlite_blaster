@@ -9,56 +9,58 @@
 
 const int8_t col_data_lens[] = {0, 1, 2, 3, 4, 6, 8, 8, 0, 0};
 
-enum {SQLT_TYPE_NULL = 0, SQLT_TYPE_INT8, SQLT_TYPE_INT16, SQLT_TYPE_INT24, SQLT_TYPE_INT32, SQLT_TYPE_INT48, SQLT_TYPE_INT64,
-        SQLT_TYPE_REAL, SQLT_TYPE_INT0, SQLT_TYPE_INT1, SQLT_TYPE_BLOB = 12, SQLT_TYPE_TEXT = 13};
+enum {SQIB_TYPE_NULL = 0, SQIB_TYPE_INT8, SQIB_TYPE_INT16, SQIB_TYPE_INT24, SQIB_TYPE_INT32, SQIB_TYPE_INT48, SQIB_TYPE_INT64,
+        SQIB_TYPE_REAL, SQIB_TYPE_INT0, SQIB_TYPE_INT1, SQIB_TYPE_BLOB = 12, SQIB_TYPE_TEXT = 13};
 
-enum {SQLT_RES_OK = 0, SQLT_RES_ERR = -1, SQLT_RES_INV_PAGE_SZ = -2, 
-  SQLT_RES_TOO_LONG = -3, SQLT_RES_WRITE_ERR = -4, SQLT_RES_FLUSH_ERR = -5};
+enum {SQIB_RES_OK = 0, SQIB_RES_ERR = -1, SQIB_RES_INV_PAGE_SZ = -2, 
+  SQIB_RES_TOO_LONG = -3, SQIB_RES_WRITE_ERR = -4, SQIB_RES_FLUSH_ERR = -5};
 
-enum {SQLT_RES_SEEK_ERR = -6, SQLT_RES_READ_ERR = -7,
-  SQLT_RES_INVALID_SIG = -8, SQLT_RES_MALFORMED = -9,
-  SQLT_RES_NOT_FOUND = -10, SQLT_RES_NOT_FINALIZED = -11,
-  SQLT_RES_TYPE_MISMATCH = -12, SQLT_RES_INV_CHKSUM = -13,
-  SQLT_RES_NEED_1_PK = -14, SQLT_RES_NO_SPACE = -15,
-  SQLT_RES_CLOSED = -16};
+enum {SQIB_RES_SEEK_ERR = -6, SQIB_RES_READ_ERR = -7,
+  SQIB_RES_INVALID_SIG = -8, SQIB_RES_MALFORMED = -9,
+  SQIB_RES_NOT_FOUND = -10, SQIB_RES_NOT_FINALIZED = -11,
+  SQIB_RES_TYPE_MISMATCH = -12, SQIB_RES_INV_CHKSUM = -13,
+  SQIB_RES_NEED_1_PK = -14, SQIB_RES_NO_SPACE = -15,
+  SQIB_RES_CLOSED = -16};
+
+namespace sqib {
 
 class sqlite_common {
 
     public:
         // Writes given value at given pointer in Sqlite format
         static uint16_t write_data(uint8_t *data_ptr, int type, const void *val, uint16_t len) {
-            if (val == NULL || type == SQLT_TYPE_NULL 
-                    || type == SQLT_TYPE_INT0 || type == SQLT_TYPE_INT1)
+            if (val == NULL || type == SQIB_TYPE_NULL 
+                    || type == SQIB_TYPE_INT0 || type == SQIB_TYPE_INT1)
                 return 0;
-            if (type >= SQLT_TYPE_INT8 && type <= SQLT_TYPE_INT64) {
+            if (type >= SQIB_TYPE_INT8 && type <= SQIB_TYPE_INT64) {
                 switch (type) {
-                case SQLT_TYPE_INT8:
+                case SQIB_TYPE_INT8:
                     util::write_uint8(data_ptr, *((int8_t *) val));
                     break;
-                case SQLT_TYPE_INT16:
+                case SQIB_TYPE_INT16:
                     util::write_uint16(data_ptr, *((int16_t *) val));
                     break;
-                case SQLT_TYPE_INT24:
+                case SQIB_TYPE_INT24:
                     util::write_int24(data_ptr, *((int32_t *) val));
                     break;
-                case SQLT_TYPE_INT32:
+                case SQIB_TYPE_INT32:
                     util::write_uint32(data_ptr, *((int32_t *) val));
                     break;
-                case SQLT_TYPE_INT48:
+                case SQIB_TYPE_INT48:
                     util::write_int48(data_ptr, *((int64_t *) val));
                     break;
-                case SQLT_TYPE_INT64:
+                case SQIB_TYPE_INT64:
                     util::write_uint64(data_ptr, *((int64_t *) val));
                     break;
                 }
             } else
-            if (type == SQLT_TYPE_REAL && len == 4) {
+            if (type == SQIB_TYPE_REAL && len == 4) {
                 // Assumes float is represented in IEEE-754 format
                 uint64_t bytes64 = util::float_to_double(val);
                 util::write_uint64(data_ptr, bytes64);
                 len = 8;
             } else
-            if (type == SQLT_TYPE_REAL && len == 8) {
+            if (type == SQIB_TYPE_REAL && len == 8) {
                 // TODO: Assumes double is represented in IEEE-754 format
                 uint64_t bytes = *((uint64_t *) val);
                 util::write_uint64(data_ptr, bytes);
@@ -100,8 +102,8 @@ class sqlite_common {
         uint32_t derive_col_type(uint32_t col_type_or_len) {
             if (col_type_or_len >= 12) {
                 if (col_type_or_len % 2)
-                    return SQLT_TYPE_TEXT;
-                return SQLT_TYPE_BLOB;
+                    return SQIB_TYPE_TEXT;
+                return SQIB_TYPE_BLOB;
             } else if (col_type_or_len < 10)
                 return col_type_or_len;
             return 0;
@@ -111,43 +113,43 @@ class sqlite_common {
             int col_type_or_len, col_len, col_type;
             uint8_t *data_ptr = locate_col(which_col, rec, col_type_or_len, col_len, col_type);
             if (data_ptr == NULL)
-                return SQLT_RES_MALFORMED;
+                return SQIB_RES_MALFORMED;
             switch (col_type) {
-                case SQLT_TYPE_BLOB:
-                case SQLT_TYPE_TEXT:
+                case SQIB_TYPE_BLOB:
+                case SQIB_TYPE_TEXT:
                     memcpy(out, data_ptr, col_len);
                     return col_len;
-                case SQLT_TYPE_NULL:
+                case SQIB_TYPE_NULL:
                     return col_type_or_len;
-                case SQLT_TYPE_INT0:
+                case SQIB_TYPE_INT0:
                     *((int8_t *) out) = 0;
                     return col_len;
-                case SQLT_TYPE_INT1:
+                case SQIB_TYPE_INT1:
                     *((int8_t *) out) = 1;
                     return col_len;
-                case SQLT_TYPE_INT8:
+                case SQIB_TYPE_INT8:
                     *((int8_t *) out) = *data_ptr;
                     return col_len;
-                case SQLT_TYPE_INT16:
+                case SQIB_TYPE_INT16:
                     *((int16_t *) out) = util::read_uint16(data_ptr);
                     return col_len;
-                case SQLT_TYPE_INT24:
+                case SQIB_TYPE_INT24:
                     *((int32_t *) out) = util::read_int24(data_ptr);
                     return col_len;
-                case SQLT_TYPE_INT32:
+                case SQIB_TYPE_INT32:
                     *((int32_t *) out) = util::read_uint32(data_ptr);
                     return col_len;
-                case SQLT_TYPE_INT48:
+                case SQIB_TYPE_INT48:
                     *((int64_t *) out) = util::read_int48(data_ptr);
                     return col_len;
-                case SQLT_TYPE_INT64:
+                case SQIB_TYPE_INT64:
                     *((int64_t *) out) = util::read_uint64(data_ptr);
                     return col_len;
-                case SQLT_TYPE_REAL:
+                case SQIB_TYPE_REAL:
                     *((double *) out) = util::read_double(data_ptr);
                     return col_len;
             }
-            return SQLT_RES_MALFORMED;
+            return SQIB_RES_MALFORMED;
         }
 
         // Initializes the buffer as a B-Tree Leaf Index
@@ -197,7 +199,7 @@ class sqlite_common {
             int hdr_len = 0;
             for (int i = 0; i < col_count; i++) {
                 int val_len_hdr_len = (value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
-                if (types == NULL || types[i] == SQLT_TYPE_TEXT || types[i] == SQLT_TYPE_BLOB) {
+                if (types == NULL || types[i] == SQIB_TYPE_TEXT || types[i] == SQIB_TYPE_BLOB) {
                     val_len_hdr_len = val_len_hdr_len * 2 + (types == NULL ? 13 : types[i]);
                 }
                 hdr_len += util::get_vlen_of_uint16(val_len_hdr_len);
@@ -224,7 +226,7 @@ class sqlite_common {
                     last_pos = 65536;
                 int ptr_len = util::read_uint16(block + offset + 3) << 1;
                 if (offset + blk_hdr_len + ptr_len + rowid_len + rec_len + rec_len_vlen + 1 >= last_pos)
-                    return SQLT_RES_NO_SPACE;
+                    return SQIB_RES_NO_SPACE;
                 last_pos -= rec_len;
                 last_pos -= rec_len_vlen;
                 last_pos -= rowid_len;
@@ -242,15 +244,15 @@ class sqlite_common {
             }
             ptr += util::write_vint32(ptr, hdr_len);
             for (int i = 0; i < col_count; i++) {
-                uint8_t type = (types == NULL ? SQLT_TYPE_TEXT : types[i]);
+                uint8_t type = (types == NULL ? SQIB_TYPE_TEXT : types[i]);
                 int value_len = (value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
-                int col_len_in_hdr = (type == SQLT_TYPE_TEXT || type == SQLT_TYPE_BLOB)
+                int col_len_in_hdr = (type == SQIB_TYPE_TEXT || type == SQIB_TYPE_BLOB)
                         ? value_len * 2 + type : type;
                 ptr += util::write_vint32(ptr, col_len_in_hdr);
             }
             for (int i = 0; i < col_count; i++) {
                 if (value_lens == NULL || value_lens[i] > 0) {
-                    ptr += write_data(ptr, types == NULL ? SQLT_TYPE_TEXT : types[i],
+                    ptr += write_data(ptr, types == NULL ? SQIB_TYPE_TEXT : types[i],
                         values[i], value_lens == NULL ? get_data_len(i, types, values) : value_lens[i]);
                 }
             }
@@ -274,7 +276,7 @@ class sqlite_common {
             int page_resv_bytes, const std::string& col_names, const std::string& table_name) {
 
             if (block_size % 512 || block_size < 512 || block_size > 65536)
-                throw SQLT_RES_INV_PAGE_SZ;
+                throw SQIB_RES_INV_PAGE_SZ;
 
             // 100 uint8_t header - refer https://www.sqlite.org/fileformat.html
             memcpy(master_block, "SQLite format 3\0", 16);
@@ -322,8 +324,8 @@ class sqlite_common {
             // if (table_script) {
             //     uint16_t script_len = strlen(table_script);
             //     if (script_len > block_size - 100 - page_resv_bytes - 8 - 10)
-            //         return SQLT_RES_TOO_LONG;
-            //     set_col_val(4, SQLT_TYPE_TEXT, table_script, script_len);
+            //         return SQIB_RES_TOO_LONG;
+            //     set_col_val(4, SQIB_TYPE_TEXT, table_script, script_len);
             // } else {
                 int table_name_len = tbl_name.length();
                 // len("CREATE TABLE ") + table_name_len + len(" (")
@@ -348,7 +350,7 @@ class sqlite_common {
                 // 6 byte hdr len, 5 byte "table", twice table name, 4 byte uint32 root
                 if (script_len > (block_size - 100 - page_resv_bytes - 8
                         - 2 - 3 - 1 - 6 - 5 - tbl_name.length() * 2 - 4))
-                    throw SQLT_RES_TOO_LONG;
+                    throw SQIB_RES_TOO_LONG;
                 uint8_t *script_loc = master_block + block_size - page_resv_bytes - script_len;
                 uint8_t *script_pos = script_loc;
                 memcpy(script_pos, "CREATE TABLE ", 13);
@@ -372,7 +374,7 @@ class sqlite_common {
             int32_t root_page_no = 2;
             const void *master_rec_values[] = {"table", tbl_name.c_str(), tbl_name.c_str(), &root_page_no, script_loc};
             const size_t master_rec_col_lens[] = {5, table_name.length(), table_name.length(), sizeof(root_page_no), script_len};
-            const uint8_t master_rec_col_types[] = {SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_TEXT, SQLT_TYPE_INT32, SQLT_TYPE_TEXT};
+            const uint8_t master_rec_col_types[] = {SQIB_TYPE_TEXT, SQIB_TYPE_TEXT, SQIB_TYPE_TEXT, SQIB_TYPE_INT32, SQIB_TYPE_TEXT};
             int res = write_new_rec(master_block, 0, 1, 5, master_rec_values, master_rec_col_lens, master_rec_col_types);
             if (res < 0)
                throw res;
@@ -380,5 +382,7 @@ class sqlite_common {
         }
 
 };
+
+} // namespace sqib
 
 #endif

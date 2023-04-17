@@ -19,6 +19,8 @@
 
 #define USE_FOPEN 1
 
+namespace sqib {
+
 typedef struct dbl_lnklst_st {
     int disk_page;
     int cache_loc;
@@ -469,4 +471,7 @@ public:
         return stats;
     }
 };
+
+} // namespace sqib
+
 #endif

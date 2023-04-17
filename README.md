@@ -60,7 +60,7 @@ In this mode, a table is created with just 2 columns, `key` and `value` as shown
 int main() {
 
     std::string col_names = "key, value";
-    sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
+    sqib::sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
     std::string key = "hello";
     std::string val = "world";
     sqib.put_string(key, val);
@@ -94,7 +94,7 @@ To retrieve the inserted values, use `get` method as shown below
 
 int main() {
     std::string col_names = "key, value";
-    sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
+    sqib::sqlite_index_blaster sqib(2, 1, col_names, "kv_index", 4096, 40, "kv_idx.db");
     std::string key = "hello";
     std::string val = "world";
     sqib.put_string(key, val);
@@ -117,7 +117,7 @@ std::string json2 = "{\"name\": \"George\", \"age\": 32, \"email\": \"george@exa
 
 int main() {
     std::string col_names = "key, doc";
-    sqlite_index_blaster sqib(2, 1, col_names, "doc_index", 4096, 40, "doc_store.db");
+    sqib::sqlite_index_blaster sqib(2, 1, col_names, "doc_index", 4096, 40, "doc_store.db");
     std::string pc = "primary_contact";
     sqib.put_string(pc, json1);
     std::string sc = "secondary_contact";
@@ -150,7 +150,7 @@ const uint8_t col_types[] = {SQLT_TYPE_TEXT, SQLT_TYPE_INT8, SQLT_TYPE_INT8, SQL
 int main() {
 
     std::string col_names = "student_name, age, maths_marks, physics_marks, chemistry_marks, average_marks";
-    sqlite_index_blaster sqib(6, 2, col_names, "student_marks", 4096, 40, "student_marks.db");
+    sqib::sqlite_index_blaster sqib(6, 2, col_names, "student_marks", 4096, 40, "student_marks.db");
 
     int8_t maths, physics, chemistry, age;
     double average;

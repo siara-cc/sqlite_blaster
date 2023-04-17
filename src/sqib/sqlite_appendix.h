@@ -11,6 +11,8 @@
 #include <iostream>
 #include "sqlite_common.h"
 
+namespace sqib {
+
 class sqlite_appendix : public sqlite_common {
 
     private:
@@ -70,10 +72,10 @@ class sqlite_appendix : public sqlite_common {
             fp = NULL;
         }
 
-        #define SQLT_TYPE_REC 255
+        #define SQIB_TYPE_REC 255
         int write_rec(uint8_t block[], int pos, int64_t rowid_or_child_pageno, int col_count, const void *values[],
                 const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
-            if (types != NULL && types[0] == SQLT_TYPE_REC) {
+            if (types != NULL && types[0] == SQIB_TYPE_REC) {
                 int rec_len = value_lens[0];
                 int rec_vlen = util::get_vlen_of_uint32(rec_len);
                 int required_space = rec_len + rec_vlen + (block[0] == 2 ? 4 : 0);
@@ -81,7 +83,7 @@ class sqlite_appendix : public sqlite_common {
                 int last_rec_pos = util::read_uint16(block + 5);
                 int available_space = last_rec_pos - (block[0] == 2 ? 12 : 8) - (filled_size * 2);
                 if (required_space > available_space)
-                    return SQLT_RES_NO_SPACE;
+                    return SQIB_RES_NO_SPACE;
                 last_rec_pos -= 4;
                 last_rec_pos -= rec_len;
                 last_rec_pos -= rec_vlen;
@@ -92,7 +94,7 @@ class sqlite_appendix : public sqlite_common {
                 util::write_uint16(block + 5, last_rec_pos);
                 util::write_uint16(block + (block[0] == 2 ? 12 : 8) + filled_size * 2, last_rec_pos);
                 util::write_uint16(block + 3, ++filled_size);
-                return SQLT_RES_OK;
+                return SQIB_RES_OK;
             }
             return write_new_rec(block, pos, rowid_or_child_pageno, col_count, values, value_lens, types);
         }
@@ -114,7 +116,7 @@ class sqlite_appendix : public sqlite_common {
                 target_block = cur_pages[page_idx];
                 int new_rec_no = util::read_uint16(target_block + 3);
                 int res = write_rec(target_block, new_rec_no, 0, column_count, values, value_lens, types);
-                if (res == SQLT_RES_NO_SPACE) {
+                if (res == SQIB_RES_NO_SPACE) {
                     util::write_uint32(target_block + 8, completed_page);
                     write_completed_page(page_idx, values, value_lens, types);
                 } else
@@ -138,7 +140,7 @@ class sqlite_appendix : public sqlite_common {
             int filled_size = util::read_uint16(block + 3) - 1;
             if (filled_size < 0) {
                 std::cout << "Unexpected filled_size < 0" << std::endl;
-                throw SQLT_RES_MALFORMED;
+                throw SQIB_RES_MALFORMED;
             }
             int last_rec_pos = util::read_uint16(block + 5);
             int hdr_len = (block[0] == 10 ? 8 : 12);
@@ -162,7 +164,7 @@ class sqlite_appendix : public sqlite_common {
             int available_space = last_rec_pos - (block[0] == 2 ? 12 : 8) - (filled_size * 2);
             if (required_space > available_space) {
                 util::write_uint32(block + 8, ptr);
-                uint8_t types[] = {SQLT_TYPE_REC};
+                uint8_t types[] = {SQIB_TYPE_REC};
                 const void *values[] = {rec};
                 size_t value_lens[1] = {(size_t) rec_len};
                 write_completed_page(page_idx, values, value_lens, types);
@@ -270,16 +272,16 @@ class sqlite_appendix : public sqlite_common {
  
         int append_rec(const void *values[], const size_t value_lens[] = NULL, const uint8_t types[] = NULL) {
             if (is_closed)
-                throw SQLT_RES_CLOSED;
-            int res = SQLT_RES_NO_SPACE;
+                throw SQIB_RES_CLOSED;
+            int res = SQIB_RES_NO_SPACE;
             uint8_t *target_block = cur_pages[0];
             uint32_t page_idx = 0;
             int new_rec_no = util::read_uint16(target_block + 3);
             res = sqlite_common::write_new_rec(target_block, new_rec_no, 0, column_count, values, value_lens, types);
-            if (res == SQLT_RES_NO_SPACE)
+            if (res == SQIB_RES_NO_SPACE)
                 write_completed_page(page_idx, values, value_lens, types);
             recs_appended++;
-            return SQLT_RES_OK;
+            return SQIB_RES_OK;
         }
 
         void close() {
@@ -316,5 +318,7 @@ class sqlite_appendix : public sqlite_common {
         }
 
 };
+
+} // namespace sqib
 
 #endif
