@@ -16,6 +16,20 @@
 
 namespace sqib {
 
+class change_fns_sqib : public chg_iface {
+    public:
+        virtual void set_block_changed(uint8_t *block, int block_sz, bool is_changed) {
+            if (is_changed)
+                block[block_sz - page_resv_bytes] |= 0x40;
+            else
+                block[block_sz - page_resv_bytes] &= 0xBF;
+        }
+        virtual bool is_block_changed(uint8_t *block, int block_sz) {
+            return block[block_sz - page_resv_bytes] & 0x40;
+        }
+        virtual ~change_fns_sqib() {}
+};
+
 // CRTP see https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern
 class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public sqlite_common {
 
@@ -215,10 +229,11 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
             master_block = NULL;
         }
 
-        ~sqlite_index_blaster() {
+        virtual ~sqlite_index_blaster() {
         }
 
         void init_derived() {
+            change_fns = new change_fns_sqib();
         }
 
         void cleanup() {

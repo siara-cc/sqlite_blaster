@@ -37,6 +37,13 @@ typedef struct {
     int last_pages_to_flush;
 } cache_stats;
 
+class chg_iface {
+  public:
+    virtual void set_block_changed(uint8_t *block, int block_sz, bool is_changed) = 0;
+    virtual bool is_block_changed(uint8_t *block, int block_sz) = 0;
+    virtual ~chg_iface() {}
+};
+
 class lru_cache {
 protected:
     int page_size;
@@ -60,12 +67,10 @@ protected:
     cache_stats stats;
     long max_pages_to_flush;
     void *(*malloc_fn)(size_t);
-    bool (*const is_changed_fn)(uint8_t *, int);
-    void (*const set_changed_fn)(uint8_t *, int, bool);
     void write_pages(std::set<int>& pages_to_write) {
         for (std::set<int>::iterator it = pages_to_write.begin(); it != pages_to_write.end(); it++) {
             uint8_t *block = &page_cache[page_size * disk_to_cache_map[*it]->cache_loc];
-            set_changed_fn(block, page_size, false);
+            iface->set_block_changed(block, page_size, false);
             //if (page_size < 65537 && block[5] < 255)
             //    block[5]++;
             off_t file_pos = page_size;
@@ -149,7 +154,7 @@ if (page_size == 4096) {
         do {
             uint8_t *block = &page_cache[cur_entry->cache_loc * page_size];
             if (block_to_keep != block) {
-              if (is_changed_fn(block, page_size)) {
+              if (iface->is_block_changed(block, page_size)) {
                 pages_to_write.insert(cur_entry->disk_page);
                 if (cur_entry->disk_page == 0 || !disk_to_cache_map[cur_entry->disk_page])
                     std::cout << "Disk cache map entry missing" << std::endl;
@@ -195,10 +200,11 @@ public:
     size_t file_page_count;
     int cache_size_in_pages;
     uint8_t *page_cache;
+    chg_iface *iface;
     lru_cache(int pg_size, int cache_size_kb, const char *fname,
-            bool (*is_changed)(uint8_t *, int), void (*set_changed)(uint8_t *, int, bool),
-            int init_page_count = 0, void *(*alloc_fn)(size_t) = NULL)
-                : filename (fname), is_changed_fn (is_changed), set_changed_fn (set_changed) {
+            chg_iface *_iface,
+            int init_page_count = 0, void *(*alloc_fn)(size_t) = NULL) {
+        iface = _iface;
         if (alloc_fn == NULL)
             alloc_fn = malloc;
         malloc_fn = alloc_fn;
@@ -206,6 +212,7 @@ public:
         cache_size_in_pages = cache_size_kb * 1024 / page_size;
         cache_occupied_size = 0;
         lnklst_first_entry = lnklst_last_entry = NULL;
+        filename = fname;
         page_cache = (uint8_t *) alloc_fn(pg_size * cache_size_in_pages);
         root_block = (uint8_t *) alloc_fn(pg_size);
         llarr = (dbl_lnklst *) alloc_fn(cache_size_in_pages * sizeof(dbl_lnklst));
@@ -266,14 +273,14 @@ public:
         memset(&stats, '\0', sizeof(stats));
         calc_flush_count();
     }
-    ~lru_cache() {
+    virtual ~lru_cache() {
         flush_pages_in_seq(0);
         std::set<int> pages_to_write;
         for (size_t ll = 0; ll < cache_size_in_pages; ll++) {
             if (llarr[ll].disk_page == 0)
               continue;
             uint8_t *block = &page_cache[page_size * llarr[ll].cache_loc];
-            if (is_changed_fn(block, page_size)) // is it changed
+            if (iface->is_block_changed(block, page_size)) // is it changed
                 pages_to_write.insert(llarr[ll].disk_page);
         }
         write_pages(pages_to_write);
@@ -375,7 +382,7 @@ public:
                   int check_count = 40; // last_pages_to_flush * 2;
                   while (check_count--) { // find block which is not changed
                     block = &page_cache[entry_to_move->cache_loc * page_size];
-                    if (!is_changed_fn(block, page_size) && block_to_keep != block)
+                    if (!iface->is_block_changed(block, page_size) && block_to_keep != block)
                       break;
                     if (entry_to_move->prev == NULL) {  // TODO: Review lru logic
                       lnklst_last_free = NULL;
@@ -383,21 +390,21 @@ public:
                     }
                     entry_to_move = entry_to_move->prev;
                   }
-                  if (is_changed_fn(block, page_size) || new_pages.size() > stats.last_pages_to_flush
+                  if (iface->is_block_changed(block, page_size) || new_pages.size() > stats.last_pages_to_flush
                              || new_pages.find(disk_page) != new_pages.end() || entry_to_move->prev == NULL) {
                       flush_pages_in_seq(block_to_keep);
                       entry_to_move = lnklst_last_entry;
                       break;
                   }
-                } while (is_changed_fn(block, page_size));
-                if (!is_changed_fn(block, page_size))
+                } while (iface->is_block_changed(block, page_size));
+                if (!iface->is_block_changed(block, page_size))
                     lnklst_last_free = entry_to_move->prev;
                 /*entry_to_move = lnklst_last_entry;
                   int check_count = 40;
                   while (check_count-- && entry_to_move != NULL) { // find block which is not changed
                     block = &page_cache[entry_to_move->cache_loc * page_size];
                     if (block_to_keep != block) {
-                      if (is_changed_fn(block, page_size)) {
+                      if (iface->is_block_changed(block, page_size)) {
                         set_changed_fn(block, page_size, false);
                         //if (page_size < 65537 && block[5] < 255)
                         //    block[5]++;

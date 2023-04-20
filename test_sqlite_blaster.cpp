@@ -667,7 +667,8 @@ bool test_random_data(long start_count, int cache_size) {
       return false;
     char cmd[150];
     sprintf(cmd, "sqlite3 %s \"pragma integrity_check\"", filename);
-    return run_cmd(cmd);
+    if (!run_cmd(cmd))
+      return false;
   }
   return true;
 }

@@ -46,6 +46,22 @@ class bptree_iter_ctx {
         }
 };
 
+class chg_iface_default : public chg_iface {
+  public:
+    virtual void set_block_changed(uint8_t *block, int block_sz, bool is_changed) {
+        std::cout << "set_block_changed" << std::endl;
+        if (is_changed)
+            block[0] |= 0x40;
+        else
+            block[0] &= 0xBF;
+    }
+    virtual bool is_block_changed(uint8_t *block, int block_sz) {
+        std::cout << "is_block_changed" << std::endl;
+        return block[0] & 0x40;
+    }
+    virtual ~chg_iface_default() {}
+};
+
 template<class T> // CRTP
 class btree_handler {
 
@@ -61,6 +77,7 @@ protected:
     int is_block_given;
     int root_page_num;
     bool is_closed;
+    chg_iface *change_fns;
 
 public:
     lru_cache *cache;
@@ -81,15 +98,18 @@ public:
     btree_handler(uint32_t block_sz = BPT_DEFAULT_BLOCK_SIZE, int cache_sz_kb = 0,
             const char *fname = NULL, int start_page_num = 0, bool whether_btree = false) :
             block_size (block_sz), cache_size (cache_sz_kb), filename (fname) {
+        change_fns = NULL;
         descendant->init_derived();
         init_stats();
         is_closed = false;
         is_block_given = 0;
         root_page_num = start_page_num;
         is_btree = whether_btree;
+        if (change_fns == NULL)
+            change_fns = new chg_iface_default();
         if (cache_size > 0) {
             cache = new lru_cache(block_size, cache_size, filename,
-                    &descendant->is_block_changed, &descendant->set_block_changed,
+                    this->change_fns,
                     start_page_num);
             root_block = current_block = cache->get_disk_page_in_cache(start_page_num);
             if (cache->is_empty()) {
@@ -97,12 +117,6 @@ public:
                 descendant->init_current_block();
             }
         }
-        // } else {
-        //     root_block = current_block = (uint8_t *) util::aligned_alloc(leaf_block_size);
-        //     descendant->set_leaf(1);
-        //     descendant->set_current_block(root_block);
-        //     descendant->init_current_block();
-        // }
     }
 
     btree_handler(uint32_t block_sz, uint8_t *block, bool is_leaf, bool should_init = true) :
@@ -118,7 +132,7 @@ public:
             descendant->set_current_block(block);
     }
 
-    ~btree_handler() {
+    virtual ~btree_handler() {
         if (!is_closed)
             close();
     }
@@ -127,8 +141,10 @@ public:
         descendant->cleanup();
         if (cache_size > 0)
             delete cache;
-        else if (!is_block_given)
+        else if (!is_block_given) {
             free(root_block);
+            delete change_fns;
+        }
         is_closed = true;
     }
 
