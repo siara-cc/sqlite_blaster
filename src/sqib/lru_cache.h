@@ -1,5 +1,5 @@
-#ifndef LRUCACHE_H
-#define LRUCACHE_H
+#ifndef SQIB_LRUCACHE_H
+#define SQIB_LRUCACHE_H
 #include <set>
 #include <iostream>
 #define _FILE_OFFSET_BITS 64

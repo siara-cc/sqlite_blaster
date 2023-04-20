@@ -1,5 +1,5 @@
-#ifndef SIARA_UTIL_H
-#define SIARA_UTIL_H
+#ifndef SIARA_SQIB_UTIL_H
+#define SIARA_SQIB_UTIL_H
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -261,7 +261,7 @@ class util {
 
     static double read_double(const uint8_t *data) {
         uint64_t value;
-        std::memcpy(&value, data, sizeof(uint64_t)); // read 8 bytes from data pointer
+        memcpy(&value, data, sizeof(uint64_t)); // read 8 bytes from data pointer
         // SQLite stores 64-bit reals as big-endian integers
         value = ((value & 0xff00000000000000ull) >> 56) | // byte 1 -> byte 8
                 ((value & 0x00ff000000000000ull) >> 40) | // byte 2 -> byte 7
@@ -272,7 +272,7 @@ class util {
                 ((value & 0x000000000000ff00ull) << 40) | // byte 7 -> byte 2
                 ((value & 0x00000000000000ffull) << 56);  // byte 8 -> byte 1
         double result;
-        std::memcpy(&result, &value, sizeof(double)); // convert the integer to a double
+        memcpy(&result, &value, sizeof(double)); // convert the integer to a double
         return result;
     }
 

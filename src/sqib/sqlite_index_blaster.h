@@ -131,7 +131,7 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
                 } else {
                     master_block = new uint8_t[block_size];
                     if (cache->read_page(master_block, 0, block_size) != block_size)
-                        throw 1;
+                        throw SQIB_RES_MALFORMED;
                 }
             }
             set_current_block_root();
