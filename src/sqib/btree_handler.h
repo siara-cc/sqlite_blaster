@@ -25,17 +25,17 @@ union page_ptr {
     uint8_t *ptr;
 };
 
-#define BPT_MAX_LVL_COUNT 10
+#define BPT_MAX_LVL_COUNT 15
 class bptree_iter_ctx {
     public:
         page_ptr pages[BPT_MAX_LVL_COUNT];
-        int found_page_pos;
+        int found_page_pos[BPT_MAX_LVL_COUNT];
         int8_t last_page_lvl;
         int8_t found_page_idx;
         void init(unsigned long page, uint8_t *ptr, int cache_size) {
             last_page_lvl = 0;
             found_page_idx = 0;
-            found_page_pos = -1;
+            found_page_pos[last_page_lvl] = -1;
             set(page, ptr, cache_size);
         }
         void set(unsigned long page, uint8_t *ptr, int cache_size) {
@@ -203,12 +203,14 @@ public:
 
     int traverse_to_leaf(bptree_iter_ctx *ctx = NULL) {
         uint8_t prev_lvl_split_count = 0;
+        int search_result;
         while (!descendant->is_leaf()) {
+            search_result = descendant->search_current_block(ctx);
             if (ctx) {
                 ctx->set(current_page, current_block, cache_size);
+                ctx->found_page_pos[ctx->last_page_lvl] = search_result;
                 ctx->last_page_lvl++;
             }
-            int search_result = descendant->search_current_block(ctx);
             if (search_result >= 0 && is_btree)
                 return search_result;
             uint8_t *child_ptr_loc = descendant->get_child_ptr_pos(search_result);
@@ -220,6 +222,12 @@ public:
                 child_ptr = descendant->get_child_ptr(child_ptr_loc);
             descendant->set_current_block(child_ptr);
         }
+        search_result = descendant->search_current_block(ctx);
+        if (ctx) {
+            ctx->set(current_page, current_block, cache_size);
+            ctx->found_page_pos[ctx->last_page_lvl] = search_result;
+        }
+        return search_result;
         return descendant->search_current_block(ctx);
     }
 
@@ -306,7 +314,7 @@ public:
                         old_block = descendant->allocate_block(block_size, descendant->is_leaf(), new_lvl);
                         old_page = cache->get_page_count() - 1;
                         memcpy(old_block, root_block, block_size);
-                        descendant->set_block_changed(old_block, block_size, true);
+                        change_fns->set_block_changed(old_block, block_size, true);
                     }
                     // } else
                     //     root_block = (uint8_t *) util::aligned_alloc(parent_block_size);

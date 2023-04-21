@@ -416,10 +416,10 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
             uint8_t *new_page;
             if (cache_size > 0) {
                 new_page = cache->get_new_page(current_block);
-                set_block_changed(new_page, size, true);
+                change_fns->set_block_changed(new_page, size, true);
                 if ((cache->file_page_count - 1) * block_size == 1073741824UL) {
                     new_page = cache->get_new_page(current_block);
-                    set_block_changed(new_page, size, true);
+                    change_fns->set_block_changed(new_page, size, true);
                 }
             }// else
             //    new_page = (uint8_t *) util::aligned_alloc(size);
@@ -757,17 +757,8 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
                     first = middle + 1;
                 else if (cmp > 0)
                     filled_sz = middle;
-                else {
-                    if (ctx) {
-                        ctx->found_page_idx = ctx->last_page_lvl;
-                        ctx->found_page_pos = middle;
-                    }
+                else
                     return middle;
-                }
-            }
-            if (ctx) {
-                ctx->found_page_idx = ctx->last_page_lvl;
-                ctx->found_page_pos = ~filled_sz;
             }
             return ~filled_sz;
         }
@@ -781,17 +772,6 @@ class sqlite_index_blaster : public btree_handler<sqlite_index_blaster>, public 
 
         bool is_changed() {
             return current_block[block_size - page_resv_bytes] & 0x40;
-        }
-
-        static void set_block_changed(uint8_t *block, int block_sz, bool is_changed) {
-            if (is_changed)
-                block[block_sz - page_resv_bytes] |= 0x40;
-            else
-                block[block_sz - page_resv_bytes] &= 0xBF;
-        }
-
-        static bool is_block_changed(uint8_t *block, int block_sz) {
-            return block[block_sz - page_resv_bytes] & 0x40;
         }
 
         inline bool is_leaf() {
