@@ -8,8 +8,6 @@ This library provides API for creating huge Sqlite indexes at breakneck speeds f
 
 This repo exploits a [lesser known feature of the Sqlite database file format](https://www.sqlite.org/withoutrowid.html) to store records as key-value pairs or documents or regular tuples.
 
-Python port here: https://github.com/siara-cc/sqlite_blaster_python
-
 # Statement of need
 
 There are a number of choices available for fast insertion of records, such as Rocks DB, LMDB and MongoDB but even they are slow due to overheads of using logs or journals for providing durability.  These overheads are significant for indexing huge datasets.
@@ -24,6 +22,10 @@ Furthermore, the other choices don't have the same number of IDEs or querying ab
 - Fast database indexing for embedded systems
 - Fast data set creation and loading for Data Science and Machine Learning
 
+# Python wrapper
+
+Sqlite blaster is also available as a Python wrapper here (https://github.com/siara-cc/sqlite_blaster_python) 
+
 # Performance
 
 The performance of this repo was compared with the Sqlite official library, LMDB and RocksDB under similar conditions of CPU, RAM and NVMe disk and the results are shown below:
@@ -32,7 +34,7 @@ The performance of this repo was compared with the Sqlite official library, LMDB
 
 RocksDB performs much better than other choices and performs consistently for over billion entries, but it is quite slow initially.
 
-The chart data can be found [here](https://github.com/siara-cc/sqlite_blaster/blob/master/SqliteBlasterPerformanceLineChart.xlsx?raw=true).
+The chart data can be found [here](https://github.com/siara-cc/sqlite_blaster/blob/main/misc/SqliteBlasterPerformanceLineChart.xlsx?raw=true).
 
 # Building and running tests
 
